@@ -7,33 +7,17 @@ LONG g_cRefDll = -1;
 
 CRITICAL_SECTION g_cs;
 
-// {A3F4CDED-B1E9-41EE-9CA6-7B4D0DE6CB0A}
-static const GUID c_clsidTextService = {
-    0xa3f4cded,
-    0xb1e9,
-    0x41ee,
-    {0x9c, 0xa6, 0x7b, 0x4d, 0xd, 0xe6, 0xcb, 0xa}};
+// DaoHui (DaoHuiBrand.h)
+static const GUID c_clsidTextService = DAOHUI_CLSID_TEXTSERVICE_INIT;
 
-// {3D02CAB6-2B8E-4781-BA20-1C9267529467}
-static const GUID c_guidProfile = {
-    0x3d02cab6,
-    0x2b8e,
-    0x4781,
-    {0xba, 0x20, 0x1c, 0x92, 0x67, 0x52, 0x94, 0x67}};
+// DaoHui (DaoHuiBrand.h)
+static const GUID c_guidProfile = DAOHUI_GUID_PROFILE_INIT;
 
-// {341F9E3A-B8AD-499D-936C-48701E329FB2}
-static const GUID c_guidLangBarItemButton = {
-    0x341f9e3a,
-    0xb8ad,
-    0x499d,
-    {0x93, 0x6c, 0x48, 0x70, 0x1e, 0x32, 0x9f, 0xb2}};
+// DaoHui (DaoHuiBrand.h)
+static const GUID c_guidLangBarItemButton = DAOHUI_GUID_LANGBAR_ITEM_BUTTON_INIT;
 
-// {2AC87E79-3260-4B32-9DEA-F8390976C20B}
-static const GUID c_guidDisplayAttributeInput = {
-    0x2ac87e79,
-    0x3260,
-    0x4b32,
-    {0x9d, 0xea, 0xf8, 0x39, 0x09, 0x76, 0xc2, 0x0b}};
+// DaoHui (DaoHuiBrand.h)
+static const GUID c_guidDisplayAttributeInput = DAOHUI_GUID_DISPLAY_ATTRIBUTE_INPUT_INIT;
 
 #ifdef WEASEL_USING_OLDER_TSF_SDK
 
@@ -58,8 +42,5 @@ const GUID GUID_LBI_INPUTMODE = {
     0x4178,
     {0xA3, 0xA7, 0x5F, 0x8A, 0x98, 0x75, 0x68, 0xE6}};
 
-const GUID GUID_IME_MODE_PRESERVED_KEY = {
-    0x0bd899fc,
-    0xa8f7,
-    0x4b42,
-    {0xa9, 0x6d, 0xce, 0xc7, 0xc5, 0x0e, 0x0e, 0xae}};
+// DaoHui (DaoHuiBrand.h)
+const GUID GUID_IME_MODE_PRESERVED_KEY = DAOHUI_GUID_IME_MODE_PRESERVED_KEY_INIT;

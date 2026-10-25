@@ -8,34 +8,21 @@
 #include <WeaselUtility.h>
 #include "InstallOptionsDlg.h"
 
-// {A3F4CDED-B1E9-41EE-9CA6-7B4D0DE6CB0A}
-static const GUID c_clsidTextService = {
-    0xa3f4cded,
-    0xb1e9,
-    0x41ee,
-    {0x9c, 0xa6, 0x7b, 0x4d, 0xd, 0xe6, 0xcb, 0xa}};
+// DaoHui text service CLSID and language profile GUID (DaoHuiBrand.h)
+static const GUID c_clsidTextService = DAOHUI_CLSID_TEXTSERVICE_INIT;
 
-// {3D02CAB6-2B8E-4781-BA20-1C9267529467}
-static const GUID c_guidProfile = {
-    0x3d02cab6,
-    0x2b8e,
-    0x4781,
-    {0xba, 0x20, 0x1c, 0x92, 0x67, 0x52, 0x94, 0x67}};
+static const GUID c_guidProfile = DAOHUI_GUID_PROFILE_INIT;
 
 // if in the future, option hant is extended, maybe a function to generate this
 // info is required
-#define PSZTITLE_HANS                                                     \
-  L"0804:{A3F4CDED-B1E9-41EE-9CA6-7B4D0DE6CB0A}{3D02CAB6-2B8E-4781-BA20-" \
-  L"1C9267529467}"
-#define PSZTITLE_HANT                                                     \
-  L"0404:{A3F4CDED-B1E9-41EE-9CA6-7B4D0DE6CB0A}{3D02CAB6-2B8E-4781-BA20-" \
-  L"1C9267529467}"
+#define PSZTITLE_HANS \
+  L"0804:" DAOHUI_CLSID_TEXTSERVICE_WSTR DAOHUI_GUID_PROFILE_WSTR
+#define PSZTITLE_HANT \
+  L"0404:" DAOHUI_CLSID_TEXTSERVICE_WSTR DAOHUI_GUID_PROFILE_WSTR
 #define ILOT_UNINSTALL 0x00000001
 typedef HRESULT(WINAPI* PTF_INSTALLLAYOUTORTIP)(LPCWSTR psz, DWORD dwFlags);
 
-#define WEASEL_WER_KEY                            \
-  L"SOFTWARE\\Microsoft\\Windows\\Windows Error " \
-  L"Reporting\\LocalDumps\\WeaselServer.exe"
+#define WEASEL_WER_KEY DAOHUI_WER_KEY_W
 
 BOOL copy_file(const std::wstring& src, const std::wstring& dest) {
   BOOL ret = CopyFile(src.c_str(), dest.c_str(), FALSE);
@@ -126,7 +113,7 @@ int install_ime_file(std::wstring& srcPath,
   WCHAR path[MAX_PATH];
   GetModuleFileNameW(GetModuleHandle(NULL), path, _countof(path));
 
-  std::wstring srcFileName = L"weasel";
+  std::wstring srcFileName = DAOHUI_TSF_BASENAME_W;
 
   srcFileName += ext;
   WCHAR drive[_MAX_DRIVE];
@@ -136,7 +123,7 @@ int install_ime_file(std::wstring& srcPath,
   srcPath = std::wstring(drive) + dir + srcFileName;
 
   GetSystemDirectoryW(path, _countof(path));
-  std::wstring destPath = std::wstring(path) + L"\\weasel" + ext;
+  std::wstring destPath = std::wstring(path) + L"\\" DAOHUI_TSF_BASENAME_W + ext;
 
   int retval = 0;
   // 复制 .dll/.ime 到系统目录
@@ -168,7 +155,7 @@ int install_ime_file(std::wstring& srcPath,
         std::wstring srcPathARM32 = srcPath;
         ireplace_last(srcPathARM32, ext, L"ARM" + ext);
 
-        std::wstring destPathARM32 = std::wstring(sysarm32) + L"\\weasel" + ext;
+        std::wstring destPathARM32 = std::wstring(sysarm32) + L"\\" DAOHUI_TSF_BASENAME_W + ext;
         if (!copy_file(srcPathARM32, destPathARM32)) {
           MSG_NOT_SILENT_ID_CAP(silent, destPathARM32.c_str(),
                                 IDS_STR_INSTALL_FAILED, MB_ICONERROR | MB_OK);
@@ -205,7 +192,7 @@ int install_ime_file(std::wstring& srcPath,
 
       // Since weaselARM64X is just a redirector we don't have separate
       // HANS and HANT variants.
-      srcPath = std::wstring(drive) + dir + L"weaselARM64X" + ext;
+      srcPath = std::wstring(drive) + dir + DAOHUI_TSF_BASENAME_W L"ARM64X" + ext;
     } else {
       ireplace_last(srcPath, ext, L"x64" + ext);
     }
@@ -232,7 +219,7 @@ int uninstall_ime_file(const std::wstring& ext,
   WCHAR path[MAX_PATH];
   GetSystemDirectoryW(path, _countof(path));
   std::wstring imePath(path);
-  imePath += L"\\weasel" + ext;
+  imePath += L"\\" DAOHUI_TSF_BASENAME_W + ext;
   retval += func(imePath, false, false, false, false, silent);
   delete_file(imePath);
   if (is_wow64()) {
@@ -247,7 +234,7 @@ int uninstall_ime_file(const std::wstring& ext,
     if (is_arm64_machine()) {
       WCHAR sysarm32[MAX_PATH];
       if (get_wow_arm32_system_dir(sysarm32, _countof(sysarm32)) > 0) {
-        std::wstring imePathARM32 = std::wstring(sysarm32) + L"\\weasel" + ext;
+        std::wstring imePathARM32 = std::wstring(sysarm32) + L"\\" DAOHUI_TSF_BASENAME_W + ext;
         retval += func(imePathARM32, false, true, true, false, silent);
         delete_file(imePathARM32);
       }
@@ -306,7 +293,7 @@ int register_ime(const std::wstring& ime_path,
             ret = RegQueryValueEx(hSubKey, L"Ime File", NULL, &type,
                                   (LPBYTE)imeFile, &len);
             if (ret = ERROR_SUCCESS) {
-              if (_wcsicmp(imeFile, L"weasel.ime") == 0) {
+              if (_wcsicmp(imeFile, DAOHUI_TSF_BASENAME_W L".ime") == 0) {
                 hKL = (HKL)k;  // already there
               }
             }
@@ -315,7 +302,7 @@ int register_ime(const std::wstring& ime_path,
             // found a spare number to register
             ret = RegCreateKey(hKey, hkl_str, &hSubKey);
             if (ret == ERROR_SUCCESS) {
-              const WCHAR ime_file[] = L"weasel.ime";
+              const WCHAR ime_file[] = DAOHUI_TSF_BASENAME_W L".ime";
               RegSetValueEx(hSubKey, L"Ime File", 0, REG_SZ, (LPBYTE)ime_file,
                             sizeof(ime_file));
               const WCHAR layout_file[] = L"kbdus.dll";
@@ -401,7 +388,7 @@ int register_ime(const std::wstring& ime_path,
         continue;
 
       // 小狼毫?
-      if (_wcsicmp(imeFile, L"weasel.ime") == 0) {
+      if (_wcsicmp(imeFile, DAOHUI_TSF_BASENAME_W L".ime") == 0) {
         DWORD value;
         swscanf_s(subKey, L"%x", &value);
         UnloadKeyboardLayout((HKL)value);
@@ -568,7 +555,7 @@ int install(bool hant, bool silent, bool old_ime_support) {
     return 1;
   }
 
-  const std::wstring executable = L"WeaselServer.exe";
+  const std::wstring executable = DAOHUI_SERVER_EXE_W;
   ret = SetRegKeyValue(HKEY_LOCAL_MACHINE, WEASEL_REG_KEY, L"ServerExecutable",
                        executable.c_str(), REG_SZ);
   if (FAILED(HRESULT_FROM_WIN32(ret))) {
@@ -623,7 +610,7 @@ int uninstall(bool silent) {
   // 注销输入法
   int retval = 0;
 
-  const WCHAR KEY[] = L"Software\\Rime\\Weasel";
+  const WCHAR KEY[] = DAOHUI_REG_KEY_W;
   HKEY hKey;
   LSTATUS ret = RegOpenKey(HKEY_CURRENT_USER, KEY, &hKey);
   if (ret == ERROR_SUCCESS) {
@@ -654,11 +641,12 @@ int uninstall(bool silent) {
 
   // 清除注册信息
   RegDeleteKey(HKEY_LOCAL_MACHINE, WEASEL_REG_KEY);
-  RegDeleteKey(HKEY_LOCAL_MACHINE, RIME_REG_KEY);
+  // Stock Weasel also deletes HKLM\Software\Rime here; DaoHui leaves it
+  // alone so a side-by-side Weasel installation keeps its keys.
 
   // delete WER register,
   // "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\Windows Error
-  // Reporting\\LocalDumps\\WeaselServer.exe" no WOW64 redirect
+  // Reporting\\LocalDumps\\DaoHuiServer.exe" no WOW64 redirect
 
   auto flag_wow64 = is_wow64() ? KEY_WOW64_64KEY : 0;
   RegDeleteKeyEx(HKEY_LOCAL_MACHINE, WEASEL_WER_KEY, flag_wow64, 0);
@@ -675,7 +663,7 @@ bool has_installed() {
   WCHAR path[MAX_PATH];
   GetSystemDirectory(path, _countof(path));
   std::wstring sysPath(path);
-  DWORD attr = GetFileAttributesW((sysPath + L"\\weasel.dll").c_str());
+  DWORD attr = GetFileAttributesW((sysPath + L"\\" DAOHUI_TSF_BASENAME_W L".dll").c_str());
   return (attr != INVALID_FILE_ATTRIBUTES &&
           !(attr & FILE_ATTRIBUTE_DIRECTORY));
 }

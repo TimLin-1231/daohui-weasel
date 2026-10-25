@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include "DaoHuiBrand.h"
 #include <filesystem>
 #include <string>
 #include <sstream>
@@ -37,7 +38,7 @@ std::filesystem::path WeaselUserDataPath();
 inline fs::path WeaselLogPath() {
   WCHAR _path[MAX_PATH] = {0};
   // default location
-  ExpandEnvironmentStringsW(L"%TEMP%\\rime.weasel", _path, _countof(_path));
+  ExpandEnvironmentStringsW(DAOHUI_LOG_DIR_W, _path, _countof(_path));
   fs::path path = fs::path(_path);
   if (!fs::exists(path)) {
     fs::create_directories(path);
@@ -194,9 +195,9 @@ inline std::wstring get_weasel_ime_name() {
       langId == MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_HONGKONG) ||
       langId == MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SINGAPORE) ||
       langId == MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_MACAU)) {
-    return L"小狼毫";
+    return DAOHUI_NAME_ZH_W;
   } else {
-    return L"Weasel";
+    return DAOHUI_NAME_EN_W;
   }
 }
 
@@ -217,7 +218,7 @@ inline LONG RegGetStringValue(HKEY key,
 
 inline LANGID get_language_id() {
   std::wstring lang{};
-  if (RegGetStringValue(HKEY_CURRENT_USER, L"Software\\Rime\\Weasel",
+  if (RegGetStringValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                         L"Language", lang) == ERROR_SUCCESS) {
     if (lang == L"chs")
       return MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED);

@@ -60,7 +60,7 @@ static int CustomInstall(bool installing) {
   bool old_ime_support = false;
   std::wstring user_dir;
 
-  const WCHAR KEY[] = L"Software\\Rime\\Weasel";
+  const WCHAR KEY[] = DAOHUI_REG_KEY_W;
   HKEY hKey;
   LSTATUS ret = RegOpenKey(HKEY_CURRENT_USER, KEY, &hKey);
   if (ret == ERROR_SUCCESS) {
@@ -103,9 +103,9 @@ static int CustomInstall(bool installing) {
       return 1;
 
   if (user_dir.empty()) {
-    // default user dir %APPDATA%\Rime
+    // default user dir %APPDATA%\DaoHui
     WCHAR _path[MAX_PATH] = {0};
-    ExpandEnvironmentStringsW(L"%APPDATA%\\Rime", _path, _countof(_path));
+    ExpandEnvironmentStringsW(DAOHUI_USER_DIR_DEFAULT_W, _path, _countof(_path));
     user_dir = std::wstring(_path);
   }
   ret = SetRegKeyValue(HKEY_CURRENT_USER, KEY, L"RimeUserDir", user_dir.c_str(),
@@ -125,13 +125,13 @@ static int CustomInstall(bool installing) {
   if (_has_installed) {
     std::wstring dir(install_dir());
     std::thread th([dir]() {
-      ShellExecuteW(NULL, NULL, (dir + L"\\WeaselServer.exe").c_str(), L"/q",
+      ShellExecuteW(NULL, NULL, (dir + L"\\" DAOHUI_SERVER_EXE_W).c_str(), L"/q",
                     NULL, SW_SHOWNORMAL);
       Sleep(500);
-      ShellExecuteW(NULL, NULL, (dir + L"\\WeaselServer.exe").c_str(), L"",
+      ShellExecuteW(NULL, NULL, (dir + L"\\" DAOHUI_SERVER_EXE_W).c_str(), L"",
                     NULL, SW_SHOWNORMAL);
       Sleep(500);
-      ShellExecuteW(NULL, NULL, (dir + L"\\WeaselDeployer.exe").c_str(),
+      ShellExecuteW(NULL, NULL, (dir + L"\\" DAOHUI_DEPLOYER_EXE_W).c_str(),
                     L"/deploy", NULL, SW_SHOWNORMAL);
     });
     th.detach();
@@ -156,19 +156,19 @@ static int Run(LPTSTR lpCmdLine) {
     WCHAR msg[1024] = {0};
     if (LoadString(GetModuleHandle(NULL), IDS_STR_HELP, msg,
                    sizeof(msg) / sizeof(TCHAR))) {
-      MessageBox(NULL, msg, L"WeaselSetup", MB_ICONINFORMATION | MB_OK);
+      MessageBox(NULL, msg, L"DaoHuiSetup", MB_ICONINFORMATION | MB_OK);
     } else {
       MessageBox(
           NULL,
-          L"Usage: WeaselSetup.exe [options]\n"
+          L"Usage: DaoHuiSetup.exe [options]\n"
           L"/? or /help    - Show this help message\n"
-          L"/u             - Uninstall Weasel\n"
-          L"/i             - Install Weasel\n"
-          L"/s             - Install Weasel (Simplified Chinese)\n"
-          L"/t             - Install Weasel (Traditional Chinese)\n"
-          L"/ls            - Set Weasel language to Simplified Chinese\n"
-          L"/lt            - Set Weasel language to Traditional Chinese\n"
-          L"/le            - Set Weasel language to English\n"
+          L"/u             - Uninstall DaoHui\n"
+          L"/i             - Install DaoHui\n"
+          L"/s             - Install DaoHui (Simplified Chinese)\n"
+          L"/t             - Install DaoHui (Traditional Chinese)\n"
+          L"/ls            - Set DaoHui language to Simplified Chinese\n"
+          L"/lt            - Set DaoHui language to Traditional Chinese\n"
+          L"/le            - Set DaoHui language to English\n"
           L"/eu            - Enable automatic update check\n"
           L"/du            - Disable automatic update check\n"
           L"/toggleime     - Toggle IME on open/close(ctrl+space)\n"
@@ -176,7 +176,7 @@ static int Run(LPTSTR lpCmdLine) {
           L"/testing       - Set update channel to testing\n"
           L"/release       - Set update channel to release\n"
           L"/userdir:<dir> - Set user directory\n",
-          L"WeaselSetup", MB_ICONINFORMATION | MB_OK);
+          L"DaoHuiSetup", MB_ICONINFORMATION | MB_OK);
     }
     return 0;
   }
@@ -189,44 +189,44 @@ static int Run(LPTSTR lpCmdLine) {
   }
 
   if (auto res = GetParamByPrefix(lpCmdLine, L"/userdir:")) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                           L"RimeUserDir", res, REG_SZ);
   }
 
   if (!wcscmp(L"/ls", lpCmdLine)) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                           L"Language", L"chs", REG_SZ);
   } else if (!wcscmp(L"/lt", lpCmdLine)) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                           L"Language", L"cht", REG_SZ);
   } else if (!wcscmp(L"/le", lpCmdLine)) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                           L"Language", L"eng", REG_SZ);
   }
 
   if (!wcscmp(L"/eu", lpCmdLine)) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel\\Updates",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_UPDATES_REG_KEY_W,
                           L"CheckForUpdates", L"1", REG_SZ);
   }
   if (!wcscmp(L"/du", lpCmdLine)) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel\\Updates",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_UPDATES_REG_KEY_W,
                           L"CheckForUpdates", L"0", REG_SZ);
   }
 
   if (!wcscmp(L"/toggleime", lpCmdLine)) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                           L"ToggleImeOnOpenClose", L"yes", REG_SZ);
   }
   if (!wcscmp(L"/toggleascii", lpCmdLine)) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                           L"ToggleImeOnOpenClose", L"no", REG_SZ);
   }
   if (!wcscmp(L"/testing", lpCmdLine)) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                           L"UpdateChannel", L"testing", REG_SZ);
   }
   if (!wcscmp(L"/release", lpCmdLine)) {
-    return SetRegKeyValue(HKEY_CURRENT_USER, L"Software\\Rime\\weasel",
+    return SetRegKeyValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                           L"UpdateChannel", L"release", REG_SZ);
   }
 

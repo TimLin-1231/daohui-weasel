@@ -9,11 +9,11 @@ rem Rime configuration manager and downloaded packages
 set plum_dir=%APPDATA%\plum
 
 rem Location of Rime user directory
-rem set rime_dir=%APPDATA%\Rime
+set rime_dir=%APPDATA%\DaoHui
 
-set key=HKEY_CURRENT_USER\SOFTWARE\Rime\Weasel
+set key=HKEY_CURRENT_USER\SOFTWARE\DaoHui
 set name=RimeUserDir
-for /f "tokens=2*" %%a in ('reg query "%key%" /v "%name%"') do set rime_dir=%%b
+for /f "tokens=2*" %%a in ('reg query "%key%" /v "%name%" 2^>nul') do set rime_dir=%%b
 
 rem Disable /plum/ bash script; use batch installer only.
 rem set use_plum=0

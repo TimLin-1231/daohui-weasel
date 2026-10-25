@@ -42,13 +42,13 @@ void Configurator::Initialize() {
   weasel_traits.distribution_name = distribution_name.c_str();
   weasel_traits.distribution_code_name = WEASEL_CODE_NAME;
   weasel_traits.distribution_version = WEASEL_VERSION;
-  weasel_traits.app_name = "rime.weasel";
+  weasel_traits.app_name = DAOHUI_LOG_APP_NAME;
   std::string log_dir = WeaselLogPath().u8string();
   weasel_traits.log_dir = log_dir.c_str();
   RimeApi* rime_api = rime_get_api();
   assert(rime_api);
   rime_api->setup(&weasel_traits);
-  LOG(INFO) << "WeaselDeployer reporting.";
+  LOG(INFO) << "DaoHuiDeployer reporting.";
   rime_api->deployer_initialize(NULL);
 }
 
@@ -114,9 +114,9 @@ int Configurator::Run(bool installing) {
 }
 
 int Configurator::UpdateWorkspace(bool report_errors) {
-  HANDLE hMutex = CreateMutex(NULL, TRUE, L"WeaselDeployerMutex");
+  HANDLE hMutex = CreateMutex(NULL, TRUE, DAOHUI_DEPLOYER_MUTEX_W);
   if (!hMutex) {
-    LOG(ERROR) << "Error creating WeaselDeployerMutex.";
+    LOG(ERROR) << "Error creating DaoHuiDeployerMutex.";
     return 1;
   }
   if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -134,7 +134,7 @@ int Configurator::UpdateWorkspace(bool report_errors) {
 
   weasel::Client client;
   if (client.Connect()) {
-    LOG(INFO) << "Turning WeaselServer into maintenance mode.";
+    LOG(INFO) << "Turning DaoHuiServer into maintenance mode.";
     client.StartMaintenance();
   }
 
@@ -156,9 +156,9 @@ int Configurator::UpdateWorkspace(bool report_errors) {
 }
 
 int Configurator::DictManagement() {
-  HANDLE hMutex = CreateMutex(NULL, TRUE, L"WeaselDeployerMutex");
+  HANDLE hMutex = CreateMutex(NULL, TRUE, DAOHUI_DEPLOYER_MUTEX_W);
   if (!hMutex) {
-    LOG(ERROR) << "Error creating WeaselDeployerMutex.";
+    LOG(ERROR) << "Error creating DaoHuiDeployerMutex.";
     return 1;
   }
   if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -173,7 +173,7 @@ int Configurator::DictManagement() {
 
   weasel::Client client;
   if (client.Connect()) {
-    LOG(INFO) << "Turning WeaselServer into maintenance mode.";
+    LOG(INFO) << "Turning DaoHuiServer into maintenance mode.";
     client.StartMaintenance();
   }
 
@@ -196,9 +196,9 @@ int Configurator::DictManagement() {
 }
 
 int Configurator::SyncUserData() {
-  HANDLE hMutex = CreateMutex(NULL, TRUE, L"WeaselDeployerMutex");
+  HANDLE hMutex = CreateMutex(NULL, TRUE, DAOHUI_DEPLOYER_MUTEX_W);
   if (!hMutex) {
-    LOG(ERROR) << "Error creating WeaselDeployerMutex.";
+    LOG(ERROR) << "Error creating DaoHuiDeployerMutex.";
     return 1;
   }
   if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -213,7 +213,7 @@ int Configurator::SyncUserData() {
 
   weasel::Client client;
   if (client.Connect()) {
-    LOG(INFO) << "Turning WeaselServer into maintenance mode.";
+    LOG(INFO) << "Turning DaoHuiServer into maintenance mode.";
     client.StartMaintenance();
   }
 

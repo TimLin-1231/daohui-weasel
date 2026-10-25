@@ -144,7 +144,7 @@ HRESULT WeaselIME::UnregisterUIClass() {
 }
 
 LPCWSTR WeaselIME::GetUIClassName() {
-  return L"WeaselUIClass";
+  return DAOHUI_IME_UI_CLASS_W;
 }
 
 LRESULT WINAPI WeaselIME::UIWndProc(HWND hWnd,

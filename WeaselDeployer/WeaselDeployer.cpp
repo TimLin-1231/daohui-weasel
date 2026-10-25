@@ -40,7 +40,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
   CreateDirectory(WeaselUserDataPath().c_str(), NULL);
 
   int ret = 0;
-  HANDLE hMutex = CreateMutex(NULL, TRUE, L"WeaselDeployerExclusiveMutex");
+  HANDLE hMutex = CreateMutex(NULL, TRUE, DAOHUI_DEPLOYER_EXCLUSIVE_MUTEX_W);
   if (!hMutex) {
     ret = 1;
   } else if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -66,16 +66,16 @@ static int Run(LPTSTR lpCmdLine) {
     WCHAR msg[1024] = {0};
     if (LoadString(GetModuleHandle(NULL), IDS_STR_HELP, msg,
                    sizeof(msg) / sizeof(TCHAR))) {
-      MessageBox(NULL, msg, L"Weasel Deployer", MB_ICONINFORMATION | MB_OK);
+      MessageBox(NULL, msg, L"DaoHui Deployer", MB_ICONINFORMATION | MB_OK);
     } else {
       MessageBox(NULL,
-                 L"Usage: WeaselDeployer.exe [options]\n"
+                 L"Usage: DaoHuiDeployer.exe [options]\n"
                  L"/? or /help		- Show this help message\n"
                  L"/deploy		- Update Workspace\n"
                  L"/dict		- Manage dictionary\n"
                  L"/sync		- Sync user data\n"
-                 L"/install		- Install Weasel (Initial deployment)",
-                 L"Weasel Deployer", MB_ICONINFORMATION | MB_OK);
+                 L"/install		- Install DaoHui (Initial deployment)",
+                 L"DaoHui Deployer", MB_ICONINFORMATION | MB_OK);
     }
     return 0;
   }

@@ -65,11 +65,8 @@ STDMETHODIMP CCandidateList::GetDescription(BSTR* pbstr) {
 }
 
 STDMETHODIMP CCandidateList::GetGUID(GUID* pguid) {
-  /// 36c3c795-7159-45aa-ab12-30229a51dbd3
-  *pguid = {0x36c3c795,
-            0x7159,
-            0x45aa,
-            {0xab, 0x12, 0x30, 0x22, 0x9a, 0x51, 0xdb, 0xd3}};
+  // DaoHui candidate list UI element GUID (DaoHuiBrand.h)
+  *pguid = DAOHUI_GUID_CANDIDATE_LIST_INIT;
   return S_OK;
 }
 

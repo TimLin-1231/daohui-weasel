@@ -1,8 +1,12 @@
 ﻿#pragma once
 
-#define WEASEL_CODE_NAME "Weasel"
-#define WEASEL_REG_KEY L"Software\\Rime\\Weasel"
-#define RIME_REG_KEY L"Software\\Rime"
+#include "DaoHuiBrand.h"
+
+// DaoHui: names come from DaoHuiBrand.h (stock: "Weasel",
+// L"Software\\Rime\\Weasel"; RIME_REG_KEY removed so uninstalling DaoHui
+// never touches HKLM\Software\Rime).
+#define WEASEL_CODE_NAME DAOHUI_CODE_NAME
+#define WEASEL_REG_KEY DAOHUI_REG_KEY_W
 
 #define STRINGIZE(x) #x
 #define VERSION_STR(x) STRINGIZE(x)

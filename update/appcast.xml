@@ -1,17 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-<channel>
-    <title>【小狼毫】輸入法更新頻道</title>
-    <link>http://rime.github.io/release/weasel/appcast.xml</link>
-    <description>小狼毫 Appcast 更新頻道</description>
-    <language>zh</language>
+<!--
+  Template of the DaoHui update feed. DaoHuiServer.exe reads the published copy
+  at DAOHUI_APPCAST_URL (include/DaoHuiBrand.h):
+  https://raw.githubusercontent.com/TimLin-1231/rime-asus-zhuyin/main/update/appcast.xml
+  The testing channel uses the same URL. Add an <item> per release, e.g.
     <item>
-      <title>小狼毫 0.17.4</title>
-      <sparkle:releaseNotesLink>http://rime.github.io/release/weasel/</sparkle:releaseNotesLink>
-      <pubDate>Wed, 04 Jun 2025 12:33:57 +0800</pubDate>
-      <enclosure url="https://github.com/rime/weasel/releases/download/0.17.4/weasel-0.17.4.0-installer.exe"
-                 sparkle:version="0.17.4"
+      <title>島輝 0.17.4</title>
+      <pubDate>Sat, 25 Oct 2026 12:00:00 +0800</pubDate>
+      <enclosure url="https://github.com/TimLin-1231/rime-asus-zhuyin/releases/download/v0.17.4/daohui-0.17.4.N-installer.exe"
+                 sparkle:version="0.17.4.N"
                  type="application/octet-stream"/>
     </item>
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+<channel>
+    <title>【島輝】輸入法更新頻道</title>
+    <link>https://raw.githubusercontent.com/TimLin-1231/rime-asus-zhuyin/main/update/appcast.xml</link>
+    <description>島輝 Appcast 更新頻道</description>
+    <language>zh</language>
   </channel>
 </rss>

@@ -9,13 +9,13 @@
 #include <vector>
 
 // Diagnostics for tools/tsf_test.py of the input method project: start the
-// application with WEASEL_TSF_LOG set to a file path and the composition
+// application with DAOHUI_TSF_LOG set to a file path and the composition
 // events of that process are appended to it. Off (one check) otherwise.
 void TsfDebugLog(const wchar_t* fmt, ...) {
   static int enabled = -1;
   static wchar_t path[MAX_PATH];
   if (enabled < 0)
-    enabled = GetEnvironmentVariableW(L"WEASEL_TSF_LOG", path, MAX_PATH) > 0;
+    enabled = GetEnvironmentVariableW(DAOHUI_TSF_LOG_ENV_W, path, MAX_PATH) > 0;
   if (!enabled)
     return;
   wchar_t buf[512];
