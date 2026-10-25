@@ -47,7 +47,8 @@ VIAddVersionKey /LANG=1028 "LegalCopyright" "GPLv3 | Copyleft RIME Developers �
 VIAddVersionKey /LANG=1028 "FileDescription" "島輝輸入法"
 VIAddVersionKey /LANG=1028 "FileVersion" "${DAOHUI_VERSION}"
 
-!define MUI_ICON ..\resource\weasel.ico
+!define MUI_ICON ..\resource\installer.ico
+!define MUI_UNICON ..\resource\installer.ico
 SetCompressor /SOLID lzma
 
 
@@ -240,6 +241,8 @@ program_files:
   File "WinSparkle.dll"
 
   File "DaoHuiSetup.exe"
+  ; settings / updates / model download app (Tauri, D:\Document\輸入法\app\daohui-settings)
+  File "DaoHuiSettings.exe"
   ; shared data files
   SetOutPath $INSTDIR\data
   File "data\*.yaml"
@@ -317,6 +320,7 @@ SectionEnd
 Section "Start Menu Shortcuts"
   SetShellVarContext all
   CreateDirectory "$SMPROGRAMS\$(DISPLAYNAME)"
+  CreateShortCut "$SMPROGRAMS\$(DISPLAYNAME)\島輝設定.lnk" "$INSTDIR\DaoHuiSettings.exe"
   CreateShortCut "$SMPROGRAMS\$(DISPLAYNAME)\$(LNKFORMANUAL).lnk" "$INSTDIR\README.txt"
   CreateShortCut "$SMPROGRAMS\$(DISPLAYNAME)\$(LNKFORSETTING).lnk" "$INSTDIR\DaoHuiDeployer.exe" "" "$SYSDIR\shell32.dll" 21
   CreateShortCut "$SMPROGRAMS\$(DISPLAYNAME)\$(LNKFORDICT).lnk" "$INSTDIR\DaoHuiDeployer.exe" "/dict" "$SYSDIR\shell32.dll" 6
