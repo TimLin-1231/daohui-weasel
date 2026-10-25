@@ -37,8 +37,11 @@ STDAPI WeaselTSF::OnEndEdit(ITfContext* pContext,
           cFetched == 1) {
         ITfRange* pRangeComposition;
         if (_pComposition->GetRange(&pRangeComposition) == S_OK) {
-          if (!IsRangeCovered(ecReadOnly, tfSelection.range, pRangeComposition))
-            _EndComposition(pContext, true);
+          if (!IsRangeCovered(ecReadOnly, tfSelection.range,
+                              pRangeComposition)) {
+            TsfDebugLog(L"OnEndEdit: caret left the composition");
+            _KeepComposition(pContext);
+          }
           pRangeComposition->Release();
         }
       }

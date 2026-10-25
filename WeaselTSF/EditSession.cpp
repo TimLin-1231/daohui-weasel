@@ -29,13 +29,25 @@ STDAPI WeaselTSF::DoEditSession(TfEditCookie ec) {
     } else {
       _committed = FALSE;
     }
-    if (_status.composing && !_IsComposing()) {
+    // Rime can be composing with nothing to show inline: right after a
+    // commit, while only the next-word bubble is up. No composition is
+    // opened for that: an empty one in a browser could later be cleared
+    // over the text just committed, and keys Rime passes on (Enter) would
+    // reach the page in the middle of a composition.
+    const bool wantComposition =
+        _status.composing &&
+        !(config.inline_preedit && context->preedit.str.empty());
+    if (wantComposition && !_IsComposing()) {
       _StartComposition(_pEditSessionContext,
                         _fCUASWorkaroundEnabled && !config.inline_preedit);
-    } else if (!_status.composing && _IsComposing()) {
+    } else if (!wantComposition && _IsComposing()) {
       _EndComposition(_pEditSessionContext, true);
     }
-    if (_IsComposing() && config.inline_preedit) {
+    // (Not "&& _IsComposing()": for the first key the composition is still
+    // being started, and the flag has to be right when the focus leaves
+    // after that one key.)
+    _inlinePreedit = config.inline_preedit;
+    if (wantComposition && _IsComposing() && config.inline_preedit) {
       _ShowInlinePreedit(_pEditSessionContext, context);
     }
     _UpdateCompositionWindow(_pEditSessionContext);

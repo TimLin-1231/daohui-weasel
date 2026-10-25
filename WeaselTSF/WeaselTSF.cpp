@@ -183,7 +183,8 @@ STDMETHODIMP WeaselTSF::OnSetThreadFocus() {
   return S_OK;
 }
 STDMETHODIMP WeaselTSF::OnKillThreadFocus() {
-  _AbortComposition();
+  TsfDebugLog(L"OnKillThreadFocus");
+  _KeepComposition(_pEditSessionContext);
   return S_OK;
 }
 BOOL WeaselTSF::_InitThreadFocusSink() {

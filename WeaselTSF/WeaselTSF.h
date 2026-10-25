@@ -8,6 +8,8 @@ class CCandidateList;
 class CLangBarItemButton;
 class CCompartmentEventSink;
 
+void TsfDebugLog(const wchar_t* fmt, ...);
+
 class WeaselTSF : public ITfTextInputProcessorEx,
                   public ITfThreadMgrEventSink,
                   public ITfTextEditSink,
@@ -121,7 +123,23 @@ class WeaselTSF : public ITfTextInputProcessorEx,
   void _SetCompositionPosition(const RECT& rc);
   BOOL _UpdateCompositionWindow(com_ptr<ITfContext> pContext);
   void _FinalizeComposition();
+  // only if pComposition is still the current one (a pending end session of
+  // an older composition must not drop a newer one)
+  void _FinalizeComposition(ITfComposition* pComposition);
+  // The text this service last wrote into the current composition (the
+  // inline preedit, or the placeholder); a clearing end session removes the
+  // composition's text only while it is exactly that.
+  void _SetShownText(const std::wstring& text) {
+    _shownText = text;
+    _shownKnown = TRUE;
+  }
+  void _ForgetShownText() { _shownKnown = FALSE; }
+  BOOL _IsCurrentComposition(ITfComposition* p) {
+    return p != nullptr && _pComposition.p == p && _pEndingComposition != p;
+  }
+  BOOL _IsShownText(TfEditCookie ec, ITfRange* pRange);
   void _AbortComposition(bool clear = true);
+  void _KeepComposition(com_ptr<ITfContext> pContext);
 
   /* Language bar */
   HWND _GetFocusedContextWindow();
@@ -232,5 +250,13 @@ class WeaselTSF : public ITfTextInputProcessorEx,
   TfGuidAtom _gaDisplayAttributeInput;
   BOOL _async_edit = false;
   BOOL _committed = false;
+  // the composition text in the document is the inline preedit (not the
+  // placeholder used when inline preedit is off)
+  BOOL _inlinePreedit = false;
+  // the composition an end session has been requested for; identity only,
+  // never dereferenced (see _EndComposition)
+  ITfComposition* _pEndingComposition = nullptr;
+  std::wstring _shownText;
+  BOOL _shownKnown = FALSE;
   BOOL _isToOpenClose = false;
 };
