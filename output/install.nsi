@@ -255,6 +255,16 @@ program_files:
   ; images
   SetOutPath $INSTDIR\data\preview
   File "data\preview\*.png"
+  ; DaoHui's own data on top of the stock data (built by
+  ; D:\Document\輸入法\tools\package_daohui_data.py; list in data_daohui\FILES.txt):
+  ; schema, dictionaries, Lua, OpenCC tables, default.yaml / weasel.yaml
+  SetOutPath $INSTDIR\data
+  File /x FILES.txt "data_daohui\*.*"
+  SetOutPath $INSTDIR\data\lua
+  File "data_daohui\lua\*.lua"
+  SetOutPath $INSTDIR\data\opencc
+  File "data_daohui\opencc\*.json"
+  File "data_daohui\opencc\*.ocd2"
 
   SetOutPath $INSTDIR
 
@@ -356,10 +366,12 @@ Section "Uninstall"
   ; Remove files and uninstaller
   SetOutPath $TEMP
   Delete  "$INSTDIR\data\opencc\*.*"
+  Delete  "$INSTDIR\data\lua\*.*"
   Delete  "$INSTDIR\data\preview\*.*"
   Delete  "$INSTDIR\data\*.*"
   Delete  "$INSTDIR\*.*"
   RMDir  "$INSTDIR\data\opencc"
+  RMDir  "$INSTDIR\data\lua"
   RMDir  "$INSTDIR\data\preview"
   RMDir  "$INSTDIR\data"
   RMDir  "$INSTDIR"
