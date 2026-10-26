@@ -93,7 +93,7 @@ The package (`data_daohui`):
 | `terra_pinyin.asus.dict.yaml` | repository; imports `terra_pinyin`, `.mcb`, `.tw`, `.personal` | project | no | copy |
 | `terra_pinyin.mcb.dict.yaml` | McBopomofo `BPMFMappings.txt` + `phrase.occ` (commit e663357dfdfa), weights rescaled with `essay.txt` | MIT (BPMFMappings originally from libtabe `tsi.src`, BSD) + LGPL-3.0 | no | rebuilt; identical to the developer's file |
 | `terra_pinyin.tw.dict.yaml` | Taiwan MOE dictionaries (國語辭典簡編本 / 重編本 / 成語典) | **CC BY-ND 3.0 TW: no derivatives may be distributed** | no, but not redistributable | **empty stub** |
-| `terra_pinyin.personal.dict.yaml` | `lexicon/personal_words.txt` (ASUS / MS Bopomofo / old Weasel exports) | private | **yes** (1,075 words, including the developer's name) | **empty stub** |
+| `terra_pinyin.personal.dict.yaml` | `lexicon/personal_words.txt` (ASUS / MS Bopomofo / old Weasel exports) | private | **yes** (the developer's own words) | **empty stub** |
 | `grammar.yaml` | repository (names the LM `wanxiang-lts-zh-hant`) | project | no | copy |
 | `default.yaml` | stock + `rime/default.custom.yaml` | LGPL-3.0 + project | no | patched copy |
 | `weasel.yaml` | stock + `rime/weasel.custom.yaml` | GPL-3.0 + project | no (generic exe names; author `TimLin-1231`) | patched copy |
@@ -209,11 +209,9 @@ Sentence accuracy (whole sentence right after Enter):
 `--check` lists them as warnings, because they are verbatim text from git-tracked sources. They
 are already in the repository, which is to become public:
 
-- `rime/lua/asus_lang.lua` (comment near line 958) and `rime/lua/asus_email.lua` (line 9) use
-  `s108…` as an e-mail example, which is the beginning of the developer's address. Use `name@host.com`.
-- `rime/lua/asus_lang.lua` line 749 uses a term from the personal English list as an example
-  (`DE-LSTM`), and `rime/lua/asus_learn.lua` line 511 uses a phrase from the personal word list
-  (交報告). Both are harmless, but reword them if the personal lists are meant to stay unseen.
+- A few code comments in `rime/lua/` (asus_lang, asus_email, asus_learn) use examples taken
+  from the developer's own address and word lists; reword them to neutral examples
+  (`name@host.com`) before the repository is made public.
 
 ## Without the language model
 
