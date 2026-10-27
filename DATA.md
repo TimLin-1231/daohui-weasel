@@ -94,6 +94,7 @@ The package (`data_daohui`):
 | `terra_pinyin.mcb.dict.yaml` | McBopomofo `BPMFMappings.txt` + `phrase.occ` (commit e663357dfdfa), weights rescaled with `essay.txt` | MIT (BPMFMappings originally from libtabe `tsi.src`, BSD) + LGPL-3.0 | no | rebuilt; identical to the developer's file |
 | `terra_pinyin.tw.dict.yaml` | Taiwan MOE dictionaries (國語辭典簡編本 / 重編本 / 成語典) | **CC BY-ND 3.0 TW: no derivatives may be distributed** | no, but not redistributable | **empty stub** |
 | `terra_pinyin.personal.dict.yaml` | `lexicon/personal_words.txt` (ASUS / MS Bopomofo / old Weasel exports) | private | **yes** (the developer's own words) | **empty stub** |
+| `terra_pinyin.synced.dict.yaml` | multi-device sync (settings app): personal words of the user's other devices | private | written only in the user dir | **empty stub** (imported by `terra_pinyin.asus`; a missing file breaks the dictionary build) |
 | `grammar.yaml` | repository (names the LM `wanxiang-lts-zh-hant`) | project | no | copy |
 | `default.yaml` | stock + `rime/default.custom.yaml` | LGPL-3.0 + project | no | patched copy |
 | `weasel.yaml` | stock + `rime/weasel.custom.yaml` | GPL-3.0 + project | no (generic exe names; author `TimLin-1231`) | patched copy |
@@ -176,7 +177,7 @@ Sentence accuracy (whole sentence right after Enter):
   Dropping the MOE supplement does not hurt there.
 - words (the developer's own 1,030-word ASUS dictionary; Top1 / Top9): full 99.1 / 100%,
   public 81.3 / 28.4%, no LM 73.7 / 28.3%. This is expected and is not a product metric. Those
-  words are his, and his user dir keeps his `terra_pinyin.personal.dict.yaml`. Top9 is low
+  words are the developer's own, and their user dir keeps that `terra_pinyin.personal.dict.yaml`. Top9 is low
   because a word that is not in the dictionary is composed as a sentence, which the expanded
   list does not offer as a row.
 - Of the dev cases, only 8 come out differently between full and public (3 better, 3 worse, 2
