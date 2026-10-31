@@ -2,6 +2,9 @@
 #include "WeaselServerApp.h"
 #include <filesystem>
 
+// DaoHui: the command that refreshes the tray icon in the main thread.
+static constexpr UINT kRefreshTrayCommand = 40090;
+
 WeaselServerApp::WeaselServerApp()
     : m_handler(std::make_unique<RimeWithWeaselHandler>(&m_ui)),
       tray_icon(m_ui) {
@@ -30,7 +33,16 @@ int WeaselServerApp::Run() {
   m_ui.Create(m_server.GetHWnd());
 
   m_handler->Initialize();
-  m_handler->OnUpdateUI([this]() { tray_icon.Refresh(); });
+  // DaoHui: requests are handled in the pipe threads, under a lock all of
+  // them share, and Shell_NotifyIcon waits for Explorer's taskbar thread
+  // (up to 4 s). That thread may itself be waiting for this server (a TSF
+  // focus event), and the request it waits for for the lock: Explorer froze.
+  // Stock deferred the refresh for explorer.exe's requests only; now it is
+  // always left to the main thread.
+  m_handler->OnUpdateUI([this]() {
+    if (!tray_refresh_posted.exchange(true))
+      ::PostMessage(m_server.GetHWnd(), WM_COMMAND, kRefreshTrayCommand, 0);
+  });
 
   tray_icon.Create(m_server.GetHWnd());
   tray_icon.Refresh();
@@ -47,6 +59,11 @@ int WeaselServerApp::Run() {
 
 void WeaselServerApp::SetupMenuHandlers() {
   std::filesystem::path dir = install_dir();
+  m_server.AddMenuHandler(kRefreshTrayCommand, [this] {
+    tray_refresh_posted = false;
+    tray_icon.Refresh();
+    return true;
+  });
   m_server.AddMenuHandler(ID_WEASELTRAY_QUIT,
                           [this] { return m_server.Stop() == 0; });
   m_server.AddMenuHandler(ID_WEASELTRAY_DEPLOY,

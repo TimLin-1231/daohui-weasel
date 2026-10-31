@@ -173,7 +173,9 @@ STDMETHODIMP WeaselTSF::OnSetThreadFocus() {
   RegGetStringValue(HKEY_CURRENT_USER, DAOHUI_REG_KEY_W,
                     L"ToggleImeOnOpenClose", _ToggleImeOnOpenClose);
   _isToOpenClose = (_ToggleImeOnOpenClose == L"yes");
-  if (m_client.Echo()) {
+  // DaoHui: light requests (200 ms at most each): this runs in the
+  // application's UI thread at every focus change, Explorer's taskbar too.
+  if (m_client.Echo(true)) {
     m_client.ProcessKeyEvent(0);
     weasel::ResponseParser parser(NULL, NULL, &_status, NULL, &_cand->style());
     bool ok = m_client.GetResponseData(std::ref(parser));
@@ -237,6 +239,11 @@ static unsigned int retry = 0;
 
 bool WeaselTSF::_EnsureServerConnected() {
   if (!m_client.Echo()) {
+    // DaoHui: a server that is there but answers late is neither reconnected
+    // to (a new session each time) nor started again; the key goes to the
+    // application.
+    if (m_client.TimedOut())
+      return false;
     _Reconnect();
     retry++;
     if (retry >= 6) {

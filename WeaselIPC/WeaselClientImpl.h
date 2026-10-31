@@ -16,7 +16,8 @@ class ClientImpl {
   void EndSession();
   void StartMaintenance();
   void EndMaintenance();
-  bool Echo();
+  bool Echo(bool light);
+  bool TimedOut() const { return timed_out; }
   bool ProcessKeyEvent(KeyEvent const& keyEvent);
   bool CommitComposition();
   bool ClearComposition();
@@ -33,7 +34,10 @@ class ClientImpl {
   void _InitializeClientInfo();
   bool _WriteClientInfo();
 
-  LRESULT _SendMessage(WEASEL_IPC_COMMAND Msg, DWORD wParam, DWORD lParam);
+  LRESULT _SendMessage(WEASEL_IPC_COMMAND Msg,
+                       DWORD wParam,
+                       DWORD lParam,
+                       bool light = false);
 
   bool _Connected() const { return channel.Connected(); }
   bool _Active() const { return channel.Connected() && session_id != 0; }
@@ -42,6 +46,11 @@ class ClientImpl {
   UINT session_id;
   std::wstring app_name;
   bool is_ime;
+  // DaoHui: the last request got no answer in time (or was skipped), and
+  // until when requests are skipped after one timed out.
+  bool timed_out;
+  ULONGLONG paused_until;
+  ULONGLONG light_paused_until;
 
   PipeChannel<PipeMessage> channel;
 };

@@ -4,8 +4,30 @@
 
 using namespace weasel;
 
+// DaoHui: how long a request waits for the server. The client runs in the UI
+// thread of every application (Explorer's taskbar, browsers); stock waited
+// for ever, and a server slow to answer (its candidate window drawn on a
+// graphics card waking up) froze them. A request that gets no answer in time
+// counts as failed: a key goes to the application.
+namespace {
+const DWORD kLight = 200;      // focus, caret position, the status probe
+const DWORD kKey = 1000;       // keys and what they lead to; Echo
+const DWORD kSession = 5000;   // starting a session; shutting the server down
+// After a request timed out, requests are skipped (as timed out) for a while
+// instead of each waiting again: light ones after a light one, all after
+// any other.
+const ULONGLONG kLightPause = 2000;
+const ULONGLONG kPause = 3000;
+}  // namespace
+
 ClientImpl::ClientImpl()
-    : session_id(0), channel(GetPipeName()), is_ime(false) {
+    : session_id(0),
+      channel(GetPipeName()),
+      is_ime(false),
+      timed_out(false),
+      paused_until(0),
+      light_paused_until(0) {
+  channel.SetTimeout(kKey);
   _InitializeClientInfo();
 }
 
@@ -59,8 +81,9 @@ bool ClientImpl::ProcessKeyEvent(KeyEvent const& keyEvent) {
   if (!_Active())
     return false;
 
-  LRESULT ret =
-      _SendMessage(WEASEL_IPC_PROCESS_KEY_EVENT, keyEvent, session_id);
+  // (Key 0 is the status probe of WeaselTSF::OnSetThreadFocus: light.)
+  LRESULT ret = _SendMessage(WEASEL_IPC_PROCESS_KEY_EVENT, keyEvent, session_id,
+                             keyEvent.keycode == 0);
   return ret != 0;
 }
 
@@ -143,7 +166,7 @@ void ClientImpl::TrayCommand(UINT menuId) {
 }
 
 void ClientImpl::StartSession() {
-  if (_Active() && Echo())
+  if (_Active() && Echo(false))
     return;
 
   _WriteClientInfo();
@@ -166,16 +189,17 @@ void ClientImpl::EndMaintenance() {
   session_id = 0;
 }
 
-bool ClientImpl::Echo() {
+bool ClientImpl::Echo(bool light) {
   if (!_Active())
     return false;
 
-  UINT serverEcho = _SendMessage(WEASEL_IPC_ECHO, 0, session_id);
+  UINT serverEcho = _SendMessage(WEASEL_IPC_ECHO, 0, session_id, light);
   return (serverEcho == session_id);
 }
 
 bool ClientImpl::GetResponseData(ResponseHandler const& handler) {
-  if (!handler) {
+  // DaoHui: after a timeout the buffer holds no answer.
+  if (!handler || timed_out) {
     return false;
   }
 
@@ -192,11 +216,49 @@ bool ClientImpl::_WriteClientInfo() {
 
 LRESULT ClientImpl::_SendMessage(WEASEL_IPC_COMMAND Msg,
                                  DWORD wParam,
-                                 DWORD lParam) {
+                                 DWORD lParam,
+                                 bool light) {
+  DWORD timeout = kKey;
+  switch (Msg) {
+    case WEASEL_IPC_FOCUS_IN:
+    case WEASEL_IPC_FOCUS_OUT:
+    case WEASEL_IPC_UPDATE_INPUT_POS:
+    case WEASEL_IPC_END_SESSION:
+    case WEASEL_IPC_TRAY_COMMAND:
+      light = true;
+      break;
+    case WEASEL_IPC_START_SESSION:
+    case WEASEL_IPC_SHUTDOWN_SERVER:
+      timeout = kSession;
+      break;
+    case WEASEL_IPC_START_MAINTENANCE:  // (the deployer, not an application)
+    case WEASEL_IPC_END_MAINTENANCE:
+      timeout = INFINITE;
+      break;
+    default:
+      break;
+  }
+  if (light)
+    timeout = kLight;
+  timed_out = false;
+  ULONGLONG now = ::GetTickCount64();
+  if (timeout != INFINITE &&
+      (now < paused_until || (light && now < light_paused_until))) {
+    timed_out = true;
+    return 0;
+  }
   try {
+    channel.SetTimeout(timeout);
     PipeMessage req{Msg, wParam, lParam};
     return channel.Transact(req);
-  } catch (DWORD /* ex */) {
+  } catch (DWORD ex) {
+    if (ex == PipeChannelBase::kTimeout) {
+      timed_out = true;
+      if (light)
+        light_paused_until = ::GetTickCount64() + kLightPause;
+      else
+        paused_until = ::GetTickCount64() + kPause;
+    }
     return 0;
   }
 }
@@ -276,8 +338,12 @@ void Client::TrayCommand(UINT menuId) {
   m_pImpl->TrayCommand(menuId);
 }
 
-bool Client::Echo() {
-  return m_pImpl->Echo();
+bool Client::Echo(bool light) {
+  return m_pImpl->Echo(light);
+}
+
+bool Client::TimedOut() const {
+  return m_pImpl->TimedOut();
 }
 
 bool Client::GetResponseData(ResponseHandler handler) {

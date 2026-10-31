@@ -118,8 +118,11 @@ class Client {
   void StartMaintenance();
   // 退出維護模式
   void EndMaintenance();
-  // 测试连接
-  bool Echo();
+  // 测试连接 (DaoHui: light = with the short time limit of focus events)
+  bool Echo(bool light = false);
+  // DaoHui: the last request got no answer in time, or was skipped because
+  // one before it did not (the server is there but slow)
+  bool TimedOut() const;
   // 请求服务处理按键消息
   bool ProcessKeyEvent(KeyEvent const& keyEvent);
   // 上屏正在編輯的文字

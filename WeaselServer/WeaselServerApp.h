@@ -6,6 +6,7 @@
 #include <WeaselUI.h>
 #include <RimeWithWeasel.h>
 #include <WeaselUtility.h>
+#include <atomic>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -67,4 +68,7 @@ class WeaselServerApp {
   weasel::UI m_ui;
   WeaselTrayIcon tray_icon;
   std::unique_ptr<RimeWithWeaselHandler> m_handler;
+  // DaoHui: a tray icon refresh is posted to the main thread, at most one
+  // waiting at a time.
+  std::atomic<bool> tray_refresh_posted{false};
 };

@@ -15,6 +15,19 @@ class PipeChannelBase {
   PipeChannelBase(PipeChannelBase&& r);
   ~PipeChannelBase();
 
+  // DaoHui: bounded waits for a client. The client runs in the UI thread of
+  // every application (Explorer's taskbar, browsers), so a server that answers
+  // late must not freeze them. Once set, the pipe is opened for overlapped
+  // I/O and every connect, write and read gives up after `ms` (INFINITE:
+  // waits as long as it takes): the pipe is closed, so a late reply is never
+  // taken for the answer to the next request, and kTimeout is thrown. A
+  // server never sets it.
+  static constexpr DWORD kTimeout = ERROR_TIMEOUT;
+  void SetTimeout(DWORD ms) {
+    overlapped = true;
+    timeout_ms = ms;
+  }
+
  protected:
   /* To ensure connection before operation */
   bool _Ensure();
@@ -27,6 +40,9 @@ class PipeChannelBase {
   size_t _WritePipe(HANDLE p, size_t s, char* b);
   void _FinalizePipe(HANDLE& p);
   void _Receive(HANDLE pipe, LPVOID msg, size_t rec_len);
+  /* Overlapped read or write on a client's pipe, bounded by timeout_ms;
+     true when a message has more data to read */
+  bool _Io(HANDLE pipe, bool write, LPVOID data, DWORD size);
   /* Try to get a connection from client */
   HANDLE _ConnectServerPipe(std::wstring& pn);
   inline bool _Invalid(HANDLE p) const { return p == INVALID_HANDLE_VALUE; }
@@ -39,6 +55,8 @@ class PipeChannelBase {
   const size_t buff_size;
   std::unique_ptr<char[]> buffer;
   std::unique_ptr<Stream> write_stream;
+  bool overlapped;
+  DWORD timeout_ms;
 
  private:
   /* Security attributes */
@@ -128,9 +146,15 @@ class PipeChannel : public PipeChannelBase {
 
     try {
       _WritePipe(pipe, data_sz, pbuff);
-    } catch (...) {
+    } catch (DWORD err) {
+      // DaoHui: only a client reconnects, and then writes to the new pipe
+      // (stock wrote to the one just closed). A server's client has gone (a
+      // server reconnecting connected to itself and left a thread waiting
+      // on that pipe); a client that timed out has given up.
+      if (pipe != hpipe || err == kTimeout)
+        throw;
       _Reconnect();
-      _WritePipe(pipe, data_sz, pbuff);
+      _WritePipe(hpipe, data_sz, pbuff);
     }
     ClearBufferStream();
   }

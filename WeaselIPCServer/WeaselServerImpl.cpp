@@ -164,6 +164,44 @@ int ServerImpl::Stop() {
 
 static std::mutex g_api_mutex;
 
+// DaoHui: a request that took 100 ms or more (waiting for the lock included)
+// is written to DaoHuiServer.slow.log in the log folder, for finding what
+// keeps applications waiting. Called under g_api_mutex.
+static void LogSlowRequest(const PipeMessage& msg,
+                           ULONGLONG start,
+                           ULONGLONG locked,
+                           ULONGLONG done) {
+  if (done - start < 100)
+    return;
+  static const char* const names[] = {
+      "echo",        "start_session",   "end_session",      "key",
+      "shutdown",    "focus_in",        "focus_out",        "input_pos",
+      "start_maint", "end_maint",       "commit",           "clear",
+      "tray_command", "select",         "highlight",        "change_page"};
+  int i = static_cast<int>(msg.Msg) - WEASEL_IPC_ECHO;
+  const char* name =
+      i >= 0 && i < static_cast<int>(_countof(names)) ? names[i] : "?";
+  try {
+    fs::path path = WeaselLogPath() / L"DaoHuiServer.slow.log";
+    std::error_code ec;
+    if (fs::file_size(path, ec) > (1u << 20))
+      fs::remove(path, ec);  // (kept small)
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, path.c_str(), L"a") != 0 || !f)
+      return;
+    SYSTEMTIME t;
+    ::GetLocalTime(&t);
+    fprintf(f,
+            "%04d-%02d-%02d %02d:%02d:%02d.%03d %s wParam=%lu session=%lu: "
+            "waited %llu ms for the lock, handled in %llu ms\n",
+            t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond,
+            t.wMilliseconds, name, msg.wParam, msg.lParam, locked - start,
+            done - locked);
+    fclose(f);
+  } catch (...) {
+  }
+}
+
 int ServerImpl::Run() {
   // This workaround causes a VC internal error:
   // void PipeServer::Listen(ServerHandler handler);
@@ -172,8 +210,11 @@ int ServerImpl::Run() {
   // auto listener = boost::bind(&PipeServer::Listen, channel.get(), handler);
   //
   auto listener = [this](PipeMessage msg, PipeServer::Respond resp) -> void {
+    ULONGLONG start = ::GetTickCount64();
     std::lock_guard guard(g_api_mutex);
+    ULONGLONG locked = ::GetTickCount64();
     HandlePipeMessage(msg, resp);
+    LogSlowRequest(msg, start, locked, ::GetTickCount64());
   };
   pipeThread = std::make_unique<boost::thread>(
       [this, &listener]() { channel->Listen(listener); });
@@ -376,6 +417,21 @@ DWORD ServerImpl::OnChangePage(WEASEL_IPC_COMMAND uMsg,
 
 template <typename _Resp>
 void ServerImpl::HandlePipeMessage(PipeMessage pipe_msg, _Resp resp) {
+  // DaoHui: focus changes and caret moves are answered before they are
+  // handled (the answer is always 0, without data). The client waits for it
+  // in an application's UI thread, and handling them draws the candidate
+  // window, which can take long while the graphics card wakes up.
+  bool answered = false;
+  switch (pipe_msg.Msg) {
+    case WEASEL_IPC_FOCUS_IN:
+    case WEASEL_IPC_FOCUS_OUT:
+    case WEASEL_IPC_UPDATE_INPUT_POS:
+      resp(0);
+      answered = true;
+      break;
+    default:
+      break;
+  }
   DWORD result;
 
   MAP_PIPE_MSG_HANDLE(pipe_msg.Msg, pipe_msg.wParam, pipe_msg.lParam)
@@ -399,7 +455,8 @@ void ServerImpl::HandlePipeMessage(PipeMessage pipe_msg, _Resp resp) {
   PIPE_MSG_HANDLE(WEASEL_IPC_TRAY_COMMAND, OnCommand);
   END_MAP_PIPE_MSG_HANDLE(result);
 
-  resp(result);
+  if (!answered)
+    resp(result);
 }
 
 PipeServer::PipeServer(std::wstring&& pn_cmd, SECURITY_ATTRIBUTES* s)

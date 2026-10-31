@@ -171,6 +171,38 @@ answer, this fork only carries it:
 - Messages for the bubble come back as `!<message>` (model not downloaded, server did
   not start, no answer).
 
+## Applications never wait long for the server (0.17.4.12)
+
+The TSF client runs in the UI thread of every application, Explorer's taskbar
+included, and stock Weasel waited for the server without limit. On a laptop whose
+screen hangs off an NVIDIA card, clicking the taskbar froze it (and Chrome) for 1.5 to
+4+ s: `MSCTF!CThreadInputMgr::_OnThreadFocus` → `WeaselTSF::OnSetThreadFocus` (Echo,
+then the status probe, key 0) → `ReadFile` on the pipe.
+
+- **Client** (`include/PipeChannel.h`, `WeaselIPC/PipeChannel.cpp`,
+  `WeaselClientImpl.cpp`): the pipe is opened for overlapped I/O and every connect,
+  write and read waits at most: 200 ms for focus in/out, caret position, the status
+  probe and `OnSetThreadFocus`'s Echo; 1 s for keys and what they lead to; 5 s to start
+  a session; maintenance (the deployer) without limit. A request that times out is
+  cancelled and the pipe closed (a late answer can never be read as the next one's)
+  and counts as failed: a key goes to the application, `GetResponseData` gives
+  nothing. Then requests are skipped for a while instead of each waiting again (light
+  ones for 2 s after a light one timed out, all for 3 s after any other), and
+  `_EnsureServerConnected` neither reconnects (a new session each time) nor restarts a
+  server that is there but slow (`Client::TimedOut`). Also fixed: after a failed write
+  a client wrote again to the pipe it had just closed, and a server whose client had
+  gone connected to itself.
+- **Server**: the tray icon is refreshed in the main thread (posted command 40090).
+  Stock refreshed it in the pipe thread, under the lock all requests share, and
+  `Shell_NotifyIcon` waits (up to about 4 s) for Explorer's taskbar thread, which could
+  itself be waiting for the server: stock deferred it for explorer.exe's own requests
+  only. Focus in/out and caret moves are answered before they are handled (the answer
+  is always 0). The candidate window is drawn by the CPU
+  (`D2D1_RENDER_TARGET_TYPE_SOFTWARE`): its DC render target was drawn by the graphics
+  card and read back after every draw, which first woke a sleeping discrete GPU.
+- Requests that took 100 ms or more (waiting for the lock included) are written to
+  `DaoHuiServer.slow.log` in the log folder (`%TEMP%\rime.daohui`), at most 1 MB.
+
 ## Building
 
 Requirements (already on the development machine):
