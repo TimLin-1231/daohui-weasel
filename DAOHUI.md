@@ -153,8 +153,14 @@ answer, this fork only carries it:
   `SendInput` (the English writing helper's F24 works the same way).
 - `DaoHuiAI.cpp` runs llama.cpp's `llama-server` (b11559 Vulkan build, falls back to the
   CPU; `127.0.0.1:8739`, `-ngl all --reasoning off`, log in `ai\llama-server.log`) on
-  Qwen3.5-4B Q4_K_M from `%LOCALAPPDATA%\DaoHui\ai` (`llama\llama-server.exe`, the
-  `.gguf`), which the settings app downloads (模型 → AI 修正). The server is started at the
+  Qwen3.5-4B Q4_K_M from `%USERPROFILE%\.daohui\ai` (`llama\llama-server.exe`, the
+  `.gguf`), which the settings app downloads (模型 → AI 修正). Not under AppData (0.17.4.9
+  used `%LOCALAPPDATA%\DaoHui\ai`): Windows redirects AppData for packaged (MSIX) apps
+  and the processes they start, and the TSF client of such an app (Claude desktop, Store
+  apps) may start DaoHuiServer through `start_service.bat`; that server looked in the
+  app's private copy of AppData and reported the model missing. The profile folder itself
+  is not redirected. (The Rime user folder under `%APPDATA%` has the same exposure; not
+  addressed here.) The server is started at the
   first request inside a job object (it dies with DaoHuiServer) and stopped after 10
   minutes unused. Measured here: ready in 3.6 s (7.6 s the first time), answers in
   0.3–0.9 s; the very first answer after installing took 45 s while the driver compiled

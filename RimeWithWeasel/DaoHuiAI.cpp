@@ -3,7 +3,7 @@
 // The model runs on this computer only: llama.cpp's llama-server (Vulkan
 // build, falls back to the CPU) with Qwen3.5-4B, listening on 127.0.0.1.
 // Both are downloaded by the settings app (AI 修正) into
-// %LOCALAPPDATA%\DaoHui\ai: llama\llama-server.exe and the .gguf. The server
+// %USERPROFILE%\.daohui\ai: llama\llama-server.exe and the .gguf. The server
 // is started at the first request, inside a job object that ends it with
 // WeaselServer, and stopped after kIdleSeconds without a request.
 //
@@ -50,11 +50,16 @@ HANDLE g_job = nullptr;
 std::chrono::steady_clock::time_point g_last_used;
 bool g_idle_watch = false;
 
+// %USERPROFILE%\.daohui\ai, not under AppData: Windows redirects AppData
+// for packaged (MSIX) apps and the processes they start, and the TSF client
+// of such an app (Claude, Store apps) may start this server (start_service.bat)
+// - it would then look in the app's private copy of AppData and find nothing.
+// The profile folder itself is not redirected (Ollama keeps ~\.ollama too).
 fs::path AiDir() {
   PWSTR path = nullptr;
   fs::path dir;
-  if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &path)))
-    dir = fs::path(path) / L"DaoHui" / L"ai";
+  if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Profile, 0, nullptr, &path)))
+    dir = fs::path(path) / L".daohui" / L"ai";
   CoTaskMemFree(path);
   return dir;
 }
@@ -236,8 +241,18 @@ std::string StartServerLocked() {
   fs::path exe = dir / L"llama" / L"llama-server.exe";
   fs::path model = dir / L"Qwen3.5-4B-Q4_K_M.gguf";
   std::error_code ec;
-  if (dir.empty() || !fs::exists(exe, ec) || !fs::exists(model, ec))
-    return u8"需要先下載 AI 修正模型：島輝設定 → 模型 → AI 修正";
+  for (const fs::path& need : {exe, model}) {
+    if (dir.empty() || !fs::exists(need, ec)) {
+      // (The path says where it was looked for: a profile moved elsewhere,
+      // a server started as another user.)
+      std::string where = dir.empty() ? std::string("USERPROFILE?")
+                                      : need.u8string();
+      if (ec)
+        where += " (" + std::to_string(ec.value()) + ")";
+      return u8"需要先下載 AI 修正模型：島輝設定 → 模型 → AI 修正（找不到 " +
+             where + u8"）";
+    }
+  }
   if (!g_job) {
     g_job = CreateJobObjectW(nullptr, nullptr);
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION info = {};
