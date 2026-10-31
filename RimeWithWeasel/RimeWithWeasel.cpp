@@ -11,6 +11,7 @@
 #include <map>
 #include <regex>
 #include <rime_api.h>
+#include "DaoHuiAI.h"
 
 #define TRANSPARENT_COLOR 0x00000000
 #define ARGB2ABGR(value)                                 \
@@ -192,6 +193,7 @@ void RimeWithWeaselHandler::Finalize() {
   m_active_session = 0;
   m_disabled = true;
   m_session_status_map.clear();
+  daohui::StopFixServer();
   LOG(INFO) << "Finalizing la rime.";
   rime_api->finalize();
 }
@@ -213,6 +215,8 @@ DWORD RimeWithWeaselHandler::AddSession(LPWSTR buffer, EatLine eat) {
       return 0;
   }
   RimeSessionId session_id = (RimeSessionId)rime_api->create_session();
+  // DaoHui: this server answers Ctrl+R (lua/asus_fix.lua, DaoHuiAI.cpp).
+  rime_api->set_option(session_id, "_asus_fix", True);
   if (m_global_ascii_mode) {
     for (const auto& pair : m_session_status_map) {
       if (pair.first) {
@@ -311,8 +315,26 @@ BOOL RimeWithWeaselHandler::ProcessKeyEvent(KeyEvent keyEvent,
   if (m_disabled)
     return FALSE;
   RimeSessionId session_id = to_session_id(ipc_id);
+  // DaoHui: F23 is pressed by DaoHuiAI.cpp when an answer to Ctrl+R is in;
+  // Lua reads it from asus_fix_result.
+  if (keyEvent.keycode == ibus::F23 &&
+      !(keyEvent.mask & ibus::Modifier::RELEASE_MASK)) {
+    std::string answer;
+    if (daohui::TakeFixAnswer(session_id, &answer))
+      rime_api->set_property(session_id, "asus_fix_result", answer.c_str());
+  }
   Bool handled = rime_api->process_key(session_id, keyEvent.keycode,
                                        expand_ibus_modifier(keyEvent.mask));
+  // DaoHui: a Ctrl+R request Lua left with this key.
+  {
+    static std::vector<char> request(1 << 16);
+    if (rime_api->get_property(session_id, "asus_fix_request", request.data(),
+                               request.size()) &&
+        request[0]) {
+      rime_api->set_property(session_id, "asus_fix_request", "");
+      daohui::AskFix(session_id, request.data());
+    }
+  }
   // vim_mode when keydown only
   if (!handled && !(keyEvent.mask & ibus::Modifier::RELEASE_MASK)) {
     bool isVimBackInCommandMode =

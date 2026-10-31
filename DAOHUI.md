@@ -137,6 +137,31 @@ Every icon is referenced from `resource/` by file name only:
 - Help/forum links (`https://rime.im/docs/`, `https://rime.im/discuss/`): DaoHui uses
   the same engine and settings as Weasel.
 
+## AI correction (Ctrl+R)
+
+Since 0.17.4.9. While composing, Ctrl+R asks a local language model to correct the
+sentence; `lua/asus_fix.lua` (input-method data) builds the request and checks the
+answer, this fork only carries it:
+
+- `AddSession` sets the option `_asus_fix` (Lua asks only when a front end does).
+- `ProcessKeyEvent`, after each key, takes a request Lua left in the session property
+  `asus_fix_request` (`<id>\t<chat completions JSON>`) and hands it to
+  `RimeWithWeasel/DaoHuiAI.cpp`, which asks in a thread of its own; before the key
+  **F23** (`0xFFD4`) it puts a waiting answer into `asus_fix_result` for Lua.
+- The answer cannot be pushed: the TSF client only takes a composition in reply to a
+  key it sent. So `DaoHuiAI.cpp` keeps the answer for the session and presses F23 with
+  `SendInput` (the English writing helper's F24 works the same way).
+- `DaoHuiAI.cpp` runs llama.cpp's `llama-server` (b11559 Vulkan build, falls back to the
+  CPU; `127.0.0.1:8739`, `-ngl all --reasoning off`, log in `ai\llama-server.log`) on
+  Qwen3.5-4B Q4_K_M from `%LOCALAPPDATA%\DaoHui\ai` (`llama\llama-server.exe`, the
+  `.gguf`), which the settings app downloads (模型 → AI 修正). The server is started at the
+  first request inside a job object (it dies with DaoHuiServer) and stopped after 10
+  minutes unused. Measured here: ready in 3.6 s (7.6 s the first time), answers in
+  0.3–0.9 s; the very first answer after installing took 45 s while the driver compiled
+  the Vulkan shaders (cached after), hence the 150 s answer timeout.
+- Messages for the bubble come back as `!<message>` (model not downloaded, server did
+  not start, no answer).
+
 ## Building
 
 Requirements (already on the development machine):
