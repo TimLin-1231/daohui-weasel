@@ -147,7 +147,10 @@ answer, this fork only carries it:
 - `ProcessKeyEvent`, after each key, takes a request Lua left in the session property
   `asus_fix_request` (`<id>\t<chat completions JSON>`) and hands it to
   `RimeWithWeasel/DaoHuiAI.cpp`, which asks in a thread of its own; before the key
-  **F23** (`0xFFD4`) it puts a waiting answer into `asus_fix_result` for Lua.
+  **F23** (`0xFFD4`) it puts a waiting answer into `asus_fix_result` for Lua. F23 is a
+  key like any other here: when an answer changed nothing, Lua leaves a second request
+  while handling it (asked again, any tone: 一血 → 一些; since 0.17.4.11), and that
+  request is taken the same way.
 - The answer cannot be pushed: the TSF client only takes a composition in reply to a
   key it sent. So `DaoHuiAI.cpp` keeps the answer for the session and presses F23 with
   `SendInput` (the English writing helper's F24 works the same way).
