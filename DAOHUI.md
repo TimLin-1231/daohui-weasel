@@ -253,8 +253,21 @@ parallel build failed with `LNK1104 … daohuix64.exp`.
 /DPRODUCT_VERSION=0.17.4.<n> output\install.nsi`). It is x64-only (quits on 32-bit
 Windows), installs to `Program Files\DaoHui\daohui-<version>`, runs `DaoHuiSetup.exe`
 (copies `daohui.dll` into System32/SysWOW64 and registers the new CLSID/profile),
-deploys with `DaoHuiDeployer.exe /install`, adds the `DaoHuiServer` Run value and starts
+deploys with `DaoHuiDeployer.exe /deploy`, adds the `DaoHuiServer` Run value and starts
 the server. Uninstall only removes DaoHui's own registry keys and files.
+
+An update asks nothing (0.17.4.14; stock Weasel asked at every update): no licence or
+folder page and no "uninstall the old version first" box when DaoHui is installed
+(`$Upgrading`); no schema-menu or style dialog (`/deploy`, not `/install`, which showed
+them whenever the user folder had no record of them); the "check for updates
+automatically?" question only when `HKCU\Software\DaoHui\Updates\CheckForUpdates` is not
+set yet (a silent install sets it to 1; stock set 0); and no reboot prompt:
+`DaoHuiSetup` renames a `daohui.dll` that applications have loaded and installs the new
+one beside it, applications opened from then on load the new one (the finish page says
+so), the renamed file goes at the next restart. A silent install (`/S`, which the
+appcasts pass as `sparkle:installerArguments`) runs `DaoHuiSetup /t` (stock `/s`
+registered the text service as Simplified Chinese). The deployer's dialogs say 確定
+(stock: 中).
 
 Before shipping: replace the icons in `resource/`, publish `update/appcast.xml` (with an
 `<item>` per release) to the URL above, and decide whether to sign the binaries.

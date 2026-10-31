@@ -59,9 +59,16 @@ RequestExecutionLevel admin
 
 ; Pages
 
+; DaoHui: an upgrade asks nothing. The licence and the folder were settled
+; at the first install; the finish page only says that applications already
+; running keep the old version until they are opened again (no reboot).
+Var Upgrading
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfUpgrading
 !insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfUpgrading
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_FINISHPAGE_TEXT "$(FINISHTEXT)"
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -88,6 +95,7 @@ LangString LNKFORUNINSTALL ${LANG_TRADCHINESE} "卸載島輝"
 LangString CONFIRMATION ${LANG_TRADCHINESE} "安裝前，請先卸載舊版本的島輝。$\n$\n按下「確定」移除舊版本，按下「取消」放棄本次安裝。"
 LangString SYSTEMVERSIONNOTOK ${LANG_TRADCHINESE} "您的系統不被支持，最低系統要求：64 位元 Windows 8.1！"
 LangString AUTOCHKUPDATE ${LANG_TRADCHINESE} "自動檢查版本更新？"
+LangString FINISHTEXT ${LANG_TRADCHINESE} "島輝已經安裝好了，不需要重新開機。$\r$\n$\r$\n已經開著的程式要關掉再打開，才會換成新版。"
 
 !insertmacro MUI_LANGUAGE "SimpChinese"
 LangString DISPLAYNAME ${LANG_SIMPCHINESE} "島輝输入法"
@@ -105,6 +113,7 @@ LangString LNKFORUNINSTALL ${LANG_SIMPCHINESE} "卸载島輝"
 LangString CONFIRMATION ${LANG_SIMPCHINESE} '安装前，请先卸载旧版本的島輝。$\n$\n点击 "确定" 移除旧版本，或点击 "取消" 放弃本次安装。'
 LangString SYSTEMVERSIONNOTOK ${LANG_SIMPCHINESE} "您的系统不被支持，最低系统要求：64 位 Windows 8.1！"
 LangString AUTOCHKUPDATE ${LANG_SIMPCHINESE} "自动检查版本更新？"
+LangString FINISHTEXT ${LANG_SIMPCHINESE} "島輝已经安装好了，不需要重新开机。$\r$\n$\r$\n已经打开的程序要关闭再打开，才会换成新版。"
 
 !insertmacro MUI_LANGUAGE "English"
 LangString DISPLAYNAME ${LANG_ENGLISH} "DaoHui"
@@ -122,6 +131,7 @@ LangString LNKFORUNINSTALL ${LANG_ENGLISH} "Uninstall DaoHui"
 LangString CONFIRMATION ${LANG_ENGLISH} "Before installation, please uninstall the old version of DaoHui.$\n$\nPress 'OK' to remove the old version, or 'Cancel' to abort installation."
 LangString SYSTEMVERSIONNOTOK ${LANG_ENGLISH} "Your system is not supported. DaoHui requires 64-bit Windows 8.1 or later."
 LangString AUTOCHKUPDATE ${LANG_ENGLISH} "Automatically check for updates?"
+LangString FINISHTEXT ${LANG_ENGLISH} "DaoHui is installed; no restart is needed.$\r$\n$\r$\nApplications already running use the new version once they are opened again."
 
 ;--------------------------------
 
@@ -141,15 +151,14 @@ toquit:
   ; The default installation directory
   StrCpy $INSTDIR "$PROGRAMFILES64\DaoHui"
 skip:
+  StrCpy $Upgrading "0"
   ReadRegStr $R0 HKLM "${REG_UNINST_KEY}" "UninstallString"
   StrCmp $R0 "" done
 
-  StrCpy $0 "Upgrade"
-  IfSilent uninst 0
-  MessageBox MB_OKCANCEL|MB_ICONINFORMATION "$(CONFIRMATION)" IDOK uninst
-  Abort
+  ; DaoHui: an older DaoHui is replaced without asking (stock asked to
+  ; uninstall it first, at every update).
+  StrCpy $Upgrading "1"
 
-uninst:
   ; Backup data directory from previous installation, user files may exist
   ReadRegStr $R1 HKLM "${DAOHUI_REG_KEY}" "WeaselRoot"
   StrCmp $R1 "" call_uninstaller
@@ -180,11 +189,17 @@ call_uninstaller:
   SetShellVarContext all
   Delete  "$SMPROGRAMS\$(DISPLAYNAME)\*.*"
   RMDir  "$SMPROGRAMS\$(DISPLAYNAME)"
-  ; Prompt reboot
-  SetRebootFlag true
+  ; (No reboot: DaoHuiSetup renames a text service DLL in use and installs
+  ; the new one beside it; applications opened from now on load the new
+  ; one, the renamed file is deleted at the next restart.)
   Sleep 800
 
 done:
+FunctionEnd
+
+Function SkipIfUpgrading
+  StrCmp $Upgrading "1" 0 +2
+  Abort
 FunctionEnd
 
 ; Registry key to check for directory (so if you install again, it will
@@ -274,7 +289,8 @@ program_files:
   ClearErrors
   ${GetOptions} $R0 "/S" $R1
   IfErrors +2 0
-  StrCpy $R2 "/s"
+  ; DaoHui: a silent install is Traditional Chinese (stock: /s, Simplified)
+  StrCpy $R2 "/t"
   ${GetOptions} $R0 "/T" $R1
   IfErrors +2 0
   StrCpy $R2 "/t"
@@ -294,13 +310,10 @@ program_files:
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   ; run as user...
-  IfSilent deploy_silently
-  ExecWait "$INSTDIR\DaoHuiDeployer.exe /install"
-  GoTo deploy_done
-
-  deploy_silently:
+  ; DaoHui: deploy without the schema menu and style dialogs (/install showed
+  ; them whenever the user folder had no record of them, i.e. at every
+  ; update): default.yaml makes 島輝注音 the only schema anyway.
   ExecWait "$INSTDIR\DaoHuiDeployer.exe /deploy"
-  deploy_done:
 
   ; don't redirect on 64 bit system for auto run setting
   SetRegView 64
@@ -310,19 +323,22 @@ program_files:
   ; Start DaoHuiServer
   Exec "$INSTDIR\DaoHuiServer.exe"
 
-  ; option CheckForUpdates (WinSparkle registry path, see DaoHuiBrand.h)
-  IfSilent DisableAutoCheckUpdate
+  ; option CheckForUpdates (WinSparkle registry path, see DaoHuiBrand.h).
+  ; DaoHui: asked once; an update keeps the answer (stock asked every time,
+  ; and a silent install turned the checks off). A silent first install
+  ; turns them on.
+  ClearErrors
+  ReadRegStr $R0 HKCU "Software\DaoHui\Updates" "CheckForUpdates"
+  IfErrors 0 end
+  IfSilent EnableAutoCheckUpdate
   MessageBox MB_YESNO|MB_ICONINFORMATION "$(AUTOCHKUPDATE)" IDYES EnableAutoCheckUpdate
-  DisableAutoCheckUpdate:
   WriteRegStr HKCU "Software\DaoHui\Updates" "CheckForUpdates" "0"
   GoTo end
   EnableAutoCheckUpdate:
   WriteRegStr HKCU "Software\DaoHui\Updates" "CheckForUpdates" "1"
   end:
 
-  ; Prompt reboot
-  StrCmp $0 "Upgrade" 0 +2
-  SetRebootFlag true
+  ; (No reboot prompt: see .onInit.)
 
 SectionEnd
 
