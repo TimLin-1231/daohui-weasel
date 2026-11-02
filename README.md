@@ -28,11 +28,14 @@ user folder (see [DAOHUI.md](DAOHUI.md)).
 安裝輸入法
 ----------
 
-本品適用於 64 位元 Windows 8.1 ~ Windows 11
+本品適用於 64 位元 Windows 10、Windows 11（安裝程式在 Windows 8.1 也能執行）
 
-初次安裝時，安裝程序將顯示「安裝選項」對話框。
+下載 [DaoHui-Setup.exe](https://github.com/TimLin-1231/daohui-weasel/releases/latest/download/DaoHui-Setup.exe)，
+打開它。出現「Windows 已保護您的電腦」時按「其他資訊」→「仍要執行」，再按「是」允許安裝。
+安裝不會問任何問題：裝在繁體中文（臺灣），並設為預設輸入法。最後一頁勾著「下載語言模型」時，
+按「完成」會打開「島輝設定」自動下載（約 410 MB）。
 
-若要將【島輝】註冊到繁體中文（臺灣）鍵盤佈局，請在「輸入語言」欄選擇「中文（臺灣）」，再點擊「安裝」按鈕。
+每一步的說明、遇到問題怎麼辦、怎麼移除：[安裝教學](https://github.com/TimLin-1231/rime-asus-zhuyin/blob/main/docs/install.md)。
 
 安裝完成後，仍可由開始菜單打開「安裝選項」更改輸入語言。
 

@@ -59,16 +59,20 @@ RequestExecutionLevel admin
 
 ; Pages
 
-; DaoHui: an upgrade asks nothing. The licence and the folder were settled
-; at the first install; the finish page only says that applications already
-; running keep the old version until they are opened again (no reboot).
+; DaoHui: one click. No licence page (the GPL needs no click-through;
+; LICENSE.txt is installed), no folder page, no questions: the install
+; starts at once and ends on the finish page, which says how to switch to
+; DaoHui and, while the language model is missing, offers to download it
+; (the settings app, --first-run). An update asks nothing either.
 Var Upgrading
-!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfUpgrading
-!insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
-!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfUpgrading
-!insertmacro MUI_PAGE_DIRECTORY
+; <user folder>\wanxiang-lts-zh-hant.gram, set by the main section
+Var ModelPath
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_TEXT "$(FINISHTEXT)"
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_TEXT "$(FINISHRUN)"
+!define MUI_FINISHPAGE_RUN_FUNCTION StartFirstRun
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW FinishShow
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -94,8 +98,8 @@ LangString LNKFORSETUP ${LANG_TRADCHINESE} "【島輝】安裝選項"
 LangString LNKFORUNINSTALL ${LANG_TRADCHINESE} "卸載島輝"
 LangString CONFIRMATION ${LANG_TRADCHINESE} "安裝前，請先卸載舊版本的島輝。$\n$\n按下「確定」移除舊版本，按下「取消」放棄本次安裝。"
 LangString SYSTEMVERSIONNOTOK ${LANG_TRADCHINESE} "您的系統不被支持，最低系統要求：64 位元 Windows 8.1！"
-LangString AUTOCHKUPDATE ${LANG_TRADCHINESE} "自動檢查版本更新？"
-LangString FINISHTEXT ${LANG_TRADCHINESE} "島輝已經安裝好了，不需要重新開機。$\r$\n$\r$\n已經開著的程式要關掉再打開，才會換成新版。"
+LangString FINISHTEXT ${LANG_TRADCHINESE} "島輝已經安裝好了，不需要重新開機。$\r$\n$\r$\n• 切換輸入法：按 Windows 鍵＋空白鍵，選「島輝」。$\r$\n• 中文／英文切換：連按兩下 Shift。$\r$\n• 已經開著的程式要關掉再打開，才會用到島輝。"
+LangString FINISHRUN ${LANG_TRADCHINESE} "下載語言模型（約 410 MB，讓整句選字更準確）"
 
 !insertmacro MUI_LANGUAGE "SimpChinese"
 LangString DISPLAYNAME ${LANG_SIMPCHINESE} "島輝输入法"
@@ -112,8 +116,8 @@ LangString LNKFORSETUP ${LANG_SIMPCHINESE} "【島輝】安装选项"
 LangString LNKFORUNINSTALL ${LANG_SIMPCHINESE} "卸载島輝"
 LangString CONFIRMATION ${LANG_SIMPCHINESE} '安装前，请先卸载旧版本的島輝。$\n$\n点击 "确定" 移除旧版本，或点击 "取消" 放弃本次安装。'
 LangString SYSTEMVERSIONNOTOK ${LANG_SIMPCHINESE} "您的系统不被支持，最低系统要求：64 位 Windows 8.1！"
-LangString AUTOCHKUPDATE ${LANG_SIMPCHINESE} "自动检查版本更新？"
-LangString FINISHTEXT ${LANG_SIMPCHINESE} "島輝已经安装好了，不需要重新开机。$\r$\n$\r$\n已经打开的程序要关闭再打开，才会换成新版。"
+LangString FINISHTEXT ${LANG_SIMPCHINESE} "島輝已经安装好了，不需要重新开机。$\r$\n$\r$\n• 切换输入法：按 Windows 键＋空格键，选「島輝」。$\r$\n• 中文／英文切换：连按两下 Shift。$\r$\n• 已经打开的程序要关闭再打开，才会用到島輝。"
+LangString FINISHRUN ${LANG_SIMPCHINESE} "下载语言模型（约 410 MB，让整句选字更准确）"
 
 !insertmacro MUI_LANGUAGE "English"
 LangString DISPLAYNAME ${LANG_ENGLISH} "DaoHui"
@@ -130,8 +134,8 @@ LangString LNKFORSETUP ${LANG_ENGLISH} "DaoHui Installation Preference"
 LangString LNKFORUNINSTALL ${LANG_ENGLISH} "Uninstall DaoHui"
 LangString CONFIRMATION ${LANG_ENGLISH} "Before installation, please uninstall the old version of DaoHui.$\n$\nPress 'OK' to remove the old version, or 'Cancel' to abort installation."
 LangString SYSTEMVERSIONNOTOK ${LANG_ENGLISH} "Your system is not supported. DaoHui requires 64-bit Windows 8.1 or later."
-LangString AUTOCHKUPDATE ${LANG_ENGLISH} "Automatically check for updates?"
-LangString FINISHTEXT ${LANG_ENGLISH} "DaoHui is installed; no restart is needed.$\r$\n$\r$\nApplications already running use the new version once they are opened again."
+LangString FINISHTEXT ${LANG_ENGLISH} "DaoHui is installed; no restart is needed.$\r$\n$\r$\n• Switch input methods with Windows+Space and pick DaoHui.$\r$\n• Press Shift twice to switch between Chinese and English.$\r$\n• Applications already running use DaoHui once they are opened again."
+LangString FINISHRUN ${LANG_ENGLISH} "Download the language model (about 410 MB, for better sentence conversion)"
 
 ;--------------------------------
 
@@ -197,9 +201,21 @@ call_uninstaller:
 done:
 FunctionEnd
 
-Function SkipIfUpgrading
-  StrCmp $Upgrading "1" 0 +2
-  Abort
+; The finish page offers the model download only while the model is missing.
+Function FinishShow
+  ${If} ${FileExists} "$ModelPath"
+    SendMessage $mui.FinishPage.Run ${BM_SETCHECK} ${BST_UNCHECKED} 0
+    ShowWindow $mui.FinishPage.Run ${SW_HIDE}
+  ${EndIf}
+FunctionEnd
+
+; The installer runs elevated; the settings app has to run as the signed-in
+; user (it writes into that user's folder, and its WebView data folder must
+; not be shared by an elevated and a normal process). Explorer opens a
+; shortcut as that user, and the shortcut carries the argument.
+Function StartFirstRun
+  CreateShortCut "$INSTDIR\DaoHuiSettings-first-run.lnk" "$INSTDIR\DaoHuiSettings.exe" "--first-run"
+  Exec '"$WINDIR\explorer.exe" "$INSTDIR\DaoHuiSettings-first-run.lnk"'
 FunctionEnd
 
 ; Registry key to check for directory (so if you install again, it will
@@ -295,7 +311,31 @@ program_files:
   IfErrors +2 0
   StrCpy $R2 "/t"
 
+  ; DaoHui: "/i" shows DaoHuiSetup's options dialog (Traditional or
+  ; Simplified, user folder) unless HKCU\Software\DaoHui has "Hant"; a first
+  ; install presets it, so the dialog never shows: Traditional Chinese, the
+  ; user folder %APPDATA%\DaoHui (or the RimeUserDir already there).
+  ClearErrors
+  ReadRegDWORD $R1 HKCU "${DAOHUI_REG_KEY}" "Hant"
+  ${If} ${Errors}
+    WriteRegDWORD HKCU "${DAOHUI_REG_KEY}" "Hant" 1
+  ${EndIf}
+
   ExecWait '"$INSTDIR\DaoHuiSetup.exe" $R2'
+
+  ; A first install makes 島輝 this user's default input method
+  ; (ILOT_DEFPROFILE); an update leaves the user's choice alone.
+  ${If} $Upgrading == "0"
+    System::Call 'input::InstallLayoutOrTip(w "0404:{FBE69A4F-6AE3-456A-A1B9-F13ACE2ACBD8}{9A01A79E-97A6-491A-8E0B-7B54EC00E330}", i 0x2) i .r1'
+  ${EndIf}
+
+  ; Where the settings app puts the language model (config.rs model_path).
+  SetShellVarContext current
+  ReadRegStr $R1 HKCU "${DAOHUI_REG_KEY}" "RimeUserDir"
+  ${If} $R1 == ""
+    StrCpy $R1 "$APPDATA\DaoHui"
+  ${EndIf}
+  StrCpy $ModelPath "$R1\wanxiang-lts-zh-hant.gram"
 
   ; Write the uninstall keys for Windows
   WriteRegStr HKLM "${REG_UNINST_KEY}" "DisplayName" "$(DISPLAYNAME)"
@@ -324,19 +364,14 @@ program_files:
   Exec "$INSTDIR\DaoHuiServer.exe"
 
   ; option CheckForUpdates (WinSparkle registry path, see DaoHuiBrand.h).
-  ; DaoHui: asked once; an update keeps the answer (stock asked every time,
-  ; and a silent install turned the checks off). A silent first install
-  ; turns them on.
+  ; DaoHui: not asked. A first install turns the checks on; an update keeps
+  ; the user's choice (WinSparkle's update window has a checkbox for it,
+  ; DaoHuiSetup /du turns them off).
   ClearErrors
   ReadRegStr $R0 HKCU "Software\DaoHui\Updates" "CheckForUpdates"
-  IfErrors 0 end
-  IfSilent EnableAutoCheckUpdate
-  MessageBox MB_YESNO|MB_ICONINFORMATION "$(AUTOCHKUPDATE)" IDYES EnableAutoCheckUpdate
-  WriteRegStr HKCU "Software\DaoHui\Updates" "CheckForUpdates" "0"
-  GoTo end
-  EnableAutoCheckUpdate:
-  WriteRegStr HKCU "Software\DaoHui\Updates" "CheckForUpdates" "1"
-  end:
+  ${If} ${Errors}
+    WriteRegStr HKCU "Software\DaoHui\Updates" "CheckForUpdates" "1"
+  ${EndIf}
 
   ; (No reboot prompt: see .onInit.)
 
