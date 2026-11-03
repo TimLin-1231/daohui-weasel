@@ -141,6 +141,13 @@ class WeaselTSF : public ITfTextInputProcessorEx,
   void _AbortComposition(bool clear = true);
   void _KeepComposition(com_ptr<ITfContext> pContext);
 
+  /* Paste while composing (KeyEventSink.cpp) */
+  BOOL _IsPasteKey(WPARAM vk);
+  void _HoldPasteKey(WPARAM vk, LPARAM lParam);
+  // sends the held paste key again (nothing if none is held)
+  void _ReplayPasteKey(const wchar_t* why);
+  void _CancelPasteKey(const wchar_t* why);
+
   /* Language bar */
   HWND _GetFocusedContextWindow();
   void _HandleLangBarMenuSelect(UINT wID);
@@ -259,4 +266,17 @@ class WeaselTSF : public ITfTextInputProcessorEx,
   std::wstring _shownText;
   BOOL _shownKnown = FALSE;
   BOOL _isToOpenClose = false;
+  // A paste key (Ctrl+V, Ctrl+Shift+V, Shift+Insert) pressed while
+  // composing, held back until the text Rime committed for it is in the
+  // document: waiting for the server's response to be applied, then for the
+  // end of the composition that text went into.
+  enum class PasteHold { None, AwaitResponse, AwaitEnd };
+  PasteHold _pasteHold = PasteHold::None;
+  WPARAM _pasteVk = 0;
+  LPARAM _pasteLParam = 0;
+  BOOL _pasteCtrl = FALSE, _pasteShift = FALSE;
+  DWORD _pasteHeldTick = 0;
+  // when the held key was sent again (0: none on its way), so that it goes
+  // through and is not held back a second time
+  DWORD _pasteSentTick = 0;
 };

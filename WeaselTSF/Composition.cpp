@@ -551,6 +551,9 @@ void WeaselTSF::_FinalizeComposition() {
   _pComposition = nullptr;
   _shownKnown = FALSE;
   _pEndingComposition = nullptr;
+  // the text committed for a held paste key is in: the key follows it
+  if (_pasteHold == PasteHold::AwaitEnd)
+    _ReplayPasteKey(L"composition ended");
 }
 
 void WeaselTSF::_FinalizeComposition(ITfComposition* pComposition) {

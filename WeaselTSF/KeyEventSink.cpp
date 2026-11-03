@@ -8,6 +8,117 @@ static weasel::KeyEvent prevKeyEvent;
 static BOOL prevfEaten = FALSE;
 static int keyCountToSimulate = 0;
 
+/* Paste while composing.
+ * Ctrl+V (Ctrl+Shift+V, Shift+Insert) while composing: Rime commits what is
+ * shown and leaves the key to the application (asus_keys.lua). The committed
+ * text reaches the document through edit sessions, which the application may
+ * grant only after it has handled the key: it then pasted into the open
+ * composition, and the commit wrote over what it had pasted. So the key is
+ * held back and sent again with SendInput once the commit is in and the
+ * composition has ended (_FinalizeComposition), or as soon as the response
+ * is applied when nothing was committed. The key sent again goes through like
+ * any other (and is not held back again: no loop when Rime keeps composing).
+ */
+namespace {
+// a held key older than this is dropped rather than pasted late
+constexpr DWORD kPasteHoldMs = 1000;
+// sent again even if the end of the composition was never reported
+constexpr UINT kPasteFallbackMs = 400;
+thread_local WeaselTSF* tPasteService = nullptr;
+thread_local UINT_PTR tPasteTimer = 0;
+
+void StopPasteTimer() {
+  if (tPasteTimer)
+    KillTimer(NULL, tPasteTimer);
+  tPasteTimer = 0;
+  tPasteService = nullptr;
+}
+
+VOID CALLBACK PasteTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
+  KillTimer(NULL, id);
+  if (id != tPasteTimer)
+    return;
+  WeaselTSF* service = tPasteService;
+  tPasteTimer = 0;
+  tPasteService = nullptr;
+  if (service)
+    service->_ReplayPasteKey(L"timer");
+}
+}  // namespace
+
+BOOL WeaselTSF::_IsPasteKey(WPARAM vk) {
+  auto down = [this](int k) { return (_lpbKeyState[k] & 0x80) != 0; };
+  const bool ctrl = down(VK_CONTROL), shift = down(VK_SHIFT);
+  if (down(VK_MENU) || down(VK_LWIN) || down(VK_RWIN))
+    return FALSE;
+  return (vk == 'V' && ctrl) || (vk == VK_INSERT && shift && !ctrl);
+}
+
+void WeaselTSF::_HoldPasteKey(WPARAM vk, LPARAM lParam) {
+  StopPasteTimer();
+  _pasteHold = PasteHold::AwaitResponse;
+  _pasteVk = vk;
+  _pasteLParam = lParam;
+  _pasteCtrl = (_lpbKeyState[VK_CONTROL] & 0x80) != 0;
+  _pasteShift = (_lpbKeyState[VK_SHIFT] & 0x80) != 0;
+  _pasteHeldTick = GetTickCount();
+  tPasteService = this;
+  tPasteTimer = SetTimer(NULL, 0, kPasteFallbackMs, PasteTimerProc);
+  TsfDebugLog(L"paste: key %u held back", (unsigned)vk);
+}
+
+void WeaselTSF::_CancelPasteKey(const wchar_t* why) {
+  if (_pasteHold == PasteHold::None)
+    return;
+  _pasteHold = PasteHold::None;
+  if (tPasteService == this)
+    StopPasteTimer();
+  TsfDebugLog(L"paste: held key dropped (%ls)", why);
+}
+
+void WeaselTSF::_ReplayPasteKey(const wchar_t* why) {
+  if (_pasteHold == PasteHold::None)
+    return;
+  _pasteHold = PasteHold::None;
+  if (tPasteService == this)
+    StopPasteTimer();
+  const DWORD age = GetTickCount() - _pasteHeldTick;
+  if (age > kPasteHoldMs) {
+    TsfDebugLog(L"paste: held key dropped after %lu ms (%ls)", age, why);
+    return;
+  }
+  // The modifiers the user still holds are not pressed again; those already
+  // released are pressed around the key.
+  const bool addCtrl = _pasteCtrl && !(GetAsyncKeyState(VK_CONTROL) & 0x8000);
+  const bool addShift = _pasteShift && !(GetAsyncKeyState(VK_SHIFT) & 0x8000);
+  const bool extended = (_pasteLParam >> 24) & 1;
+  INPUT inputs[6] = {};
+  int n = 0;
+  auto key = [&](WORD vk, bool up, bool ext) {
+    INPUT& in = inputs[n++];
+    in.type = INPUT_KEYBOARD;
+    in.ki.wVk = vk;
+    in.ki.wScan = static_cast<WORD>(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC));
+    in.ki.dwFlags = (up ? KEYEVENTF_KEYUP : 0) | (ext ? KEYEVENTF_EXTENDEDKEY : 0);
+  };
+  if (addCtrl)
+    key(VK_CONTROL, false, false);
+  if (addShift)
+    key(VK_SHIFT, false, false);
+  key(static_cast<WORD>(_pasteVk), false, extended);
+  key(static_cast<WORD>(_pasteVk), true, extended);
+  if (addShift)
+    key(VK_SHIFT, true, false);
+  if (addCtrl)
+    key(VK_CONTROL, true, false);
+  _pasteSentTick = GetTickCount() | 1;
+  UINT sent = SendInput(n, inputs, sizeof(INPUT));
+  TsfDebugLog(L"paste: key %u sent again after %lu ms (%ls), %u/%d events",
+              (unsigned)_pasteVk, age, why, sent, n);
+  if (sent == 0)
+    _pasteSentTick = 0;
+}
+
 void WeaselTSF::_ProcessKeyEvent(WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
   // when _IsKeyboardDisabled don't eat the key,
   // when keyboard closable and keyboard closed, don't eat the key
@@ -34,8 +145,19 @@ void WeaselTSF::_ProcessKeyEvent(WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
       else if (ke.keycode == ibus::Down)
         ke.keycode = ibus::Up;
     }
-    if (!keyCountToSimulate)
+    if (!keyCountToSimulate) {
+      const bool wasComposing = _status.composing || _IsComposing();
       *pfEaten = (BOOL)m_client.ProcessKeyEvent(ke);
+      if (!(ke.mask & ibus::RELEASE_MASK) && _IsPasteKey(wParam)) {
+        const bool sentAgain =
+            _pasteSentTick && GetTickCount() - _pasteSentTick < kPasteHoldMs;
+        _pasteSentTick = 0;
+        if (!sentAgain && !*pfEaten && wasComposing) {
+          _HoldPasteKey(wParam, lParam);
+          *pfEaten = TRUE;
+        }
+      }
+    }
 
     if (ke.keycode == ibus::Caps_Lock) {
       if (prevKeyEvent.keycode == ibus::Caps_Lock && prevfEaten == TRUE &&
@@ -68,6 +190,7 @@ STDAPI WeaselTSF::OnSetFocus(BOOL fForeground) {
   else {
     m_client.FocusOut();
     TsfDebugLog(L"OnSetFocus(FALSE)");
+    _CancelPasteKey(L"focus left");
     _KeepComposition(_pEditSessionContext);
   }
 

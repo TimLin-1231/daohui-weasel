@@ -53,6 +53,17 @@ STDAPI WeaselTSF::DoEditSession(TfEditCookie ec) {
     _UpdateCompositionWindow(_pEditSessionContext);
   }
 
+  // A paste key held back for this response (KeyEventSink.cpp) follows the
+  // text committed for it: once the composition that text went into has
+  // ended (_FinalizeComposition), or now if nothing was committed or the end
+  // has already run.
+  if (_pasteHold == PasteHold::AwaitResponse) {
+    if (!commit.empty() && _pEndingComposition != nullptr)
+      _pasteHold = PasteHold::AwaitEnd;
+    else
+      _ReplayPasteKey(commit.empty() ? L"nothing committed" : L"committed");
+  }
+
   _UpdateUI(*context, _status);
 
   return TRUE;

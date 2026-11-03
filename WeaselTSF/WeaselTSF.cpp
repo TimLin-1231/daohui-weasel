@@ -95,6 +95,7 @@ STDAPI WeaselTSF::Activate(ITfThreadMgr* pThreadMgr, TfClientId tfClientId) {
 }
 
 STDAPI WeaselTSF::Deactivate() {
+  _CancelPasteKey(L"deactivated");
   m_client.EndSession();
 
   _InitTextEditSink(com_ptr<ITfDocumentMgr>());
@@ -186,6 +187,7 @@ STDMETHODIMP WeaselTSF::OnSetThreadFocus() {
 }
 STDMETHODIMP WeaselTSF::OnKillThreadFocus() {
   TsfDebugLog(L"OnKillThreadFocus");
+  _CancelPasteKey(L"thread focus left");
   _KeepComposition(_pEditSessionContext);
   return S_OK;
 }
