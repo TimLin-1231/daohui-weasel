@@ -46,6 +46,31 @@ VOID CALLBACK PasteTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
 }
 }  // namespace
 
+// DaoHui: a key press that went to the application while the input method is
+// on, and why (weasel::LogEvent). Releases and modifiers are left out.
+static void LogPassedKey(WPARAM vk, LPARAM lParam, const wchar_t* why) {
+  if ((static_cast<DWORD>(lParam) >> 31) & 1)
+    return;
+  switch (vk) {
+    case VK_SHIFT:
+    case VK_LSHIFT:
+    case VK_RSHIFT:
+    case VK_CONTROL:
+    case VK_LCONTROL:
+    case VK_RCONTROL:
+    case VK_MENU:
+    case VK_LMENU:
+    case VK_RMENU:
+    case VK_LWIN:
+    case VK_RWIN:
+      return;
+    default:
+      break;
+  }
+  weasel::LogEvent(L"key 0x%02x went to the application: %ls", (unsigned)vk,
+                   why);
+}
+
 BOOL WeaselTSF::_IsPasteKey(WPARAM vk) {
   auto down = [this](int k) { return (_lpbKeyState[k] & 0x80) != 0; };
   const bool ctrl = down(VK_CONTROL), shift = down(VK_SHIFT);
@@ -130,6 +155,8 @@ void WeaselTSF::_ProcessKeyEvent(WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
   // if server connection is Not OK, don't eat it.
   if (!_EnsureServerConnected()) {
     *pfEaten = FALSE;
+    LogPassedKey(wParam, lParam,
+                 m_client.TimedOut() ? L"server late (echo)" : L"no server");
     return;
   }
   weasel::KeyEvent ke;
@@ -148,6 +175,10 @@ void WeaselTSF::_ProcessKeyEvent(WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
     if (!keyCountToSimulate) {
       const bool wasComposing = _status.composing || _IsComposing();
       *pfEaten = (BOOL)m_client.ProcessKeyEvent(ke);
+      if (!*pfEaten && m_client.TimedOut())
+        LogPassedKey(wParam, lParam, L"server late (key)");
+      else if (!*pfEaten && wasComposing)
+        LogPassedKey(wParam, lParam, L"server did not take it while composing");
       if (!(ke.mask & ibus::RELEASE_MASK) && _IsPasteKey(wParam)) {
         const bool sentAgain =
             _pasteSentTick && GetTickCount() - _pasteSentTick < kPasteHoldMs;

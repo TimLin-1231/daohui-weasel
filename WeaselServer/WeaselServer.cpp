@@ -18,6 +18,32 @@
 #pragma comment(lib, "Shcore.lib")
 CAppModule _Module;
 
+// DaoHui: the server answers every key of every application, so it runs at
+// normal priority whoever started it. A process inherits its parent's CPU
+// priority class and, from a Task Scheduler task of priority 5-7, a low I/O
+// and memory priority as well: the learning-data backup task restarts the
+// server, and at background priority a busy machine kept it from answering
+// within the front end's time limit (the keys then went to the application as
+// letters). Lowering is never wanted here; raising to normal needs no
+// privilege.
+static void UseNormalPriority() {
+  HANDLE self = GetCurrentProcess();
+  SetPriorityClass(self, NORMAL_PRIORITY_CLASS);
+  MEMORY_PRIORITY_INFORMATION memory = {MEMORY_PRIORITY_NORMAL};
+  SetProcessInformation(self, ProcessMemoryPriority, &memory, sizeof(memory));
+  // I/O priority has no documented setter for a process.
+  typedef LONG(NTAPI * SetInformationProcess)(HANDLE, ULONG, PVOID, ULONG);
+  HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  auto set = ntdll ? reinterpret_cast<SetInformationProcess>(
+                         GetProcAddress(ntdll, "NtSetInformationProcess"))
+                   : nullptr;
+  if (set) {
+    const ULONG kProcessIoPriority = 33;
+    ULONG io_normal = 2;
+    set(self, kProcessIoPriority, &io_normal, sizeof(io_normal));
+  }
+}
+
 int WINAPI _tWinMain(HINSTANCE hInstance,
                      HINSTANCE /*hPrevInstance*/,
                      LPTSTR lpstrCmdLine,
@@ -112,6 +138,7 @@ int WINAPI _tWinMain(HINSTANCE hInstance,
   }
 
   CreateDirectory(WeaselUserDataPath().c_str(), NULL);
+  UseNormalPriority();
 
   int nRet = 0;
   try {

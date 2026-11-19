@@ -97,6 +97,11 @@ typedef CommandHandler ServerLauncher;
 class ClientImpl;
 class ServerImpl;
 
+// DaoHui: append one line to %USERPROFILE%\.daohui\logs\frontend.log (time,
+// process, application, the message). For failures only: it opens the file
+// each time.
+void LogEvent(const wchar_t* fmt, ...);
+
 // IPC接口類
 
 class Client {

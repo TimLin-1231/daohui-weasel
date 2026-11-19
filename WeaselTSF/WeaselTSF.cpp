@@ -246,6 +246,8 @@ bool WeaselTSF::_EnsureServerConnected() {
     // application.
     if (m_client.TimedOut())
       return false;
+    weasel::LogEvent(L"echo failed: reconnecting (a new session), try %u",
+                     retry + 1);
     _Reconnect();
     retry++;
     if (retry >= 6) {

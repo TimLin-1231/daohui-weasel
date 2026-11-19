@@ -1,6 +1,9 @@
 ﻿#include "stdafx.h"
 #include "WeaselClientImpl.h"
 #include <StringAlgorithm.hpp>
+#include <cstdarg>
+#include <cstdio>
+#include <string>
 
 using namespace weasel;
 
@@ -18,7 +21,76 @@ const DWORD kSession = 5000;   // starting a session; shutting the server down
 // any other.
 const ULONGLONG kLightPause = 2000;
 const ULONGLONG kPause = 3000;
+
+// The event log (LogEvent) is renamed to frontend.old.log past this size.
+const DWORD kLogMaxBytes = 256 * 1024;
+
+struct LogPaths {
+  std::wstring file, old_file, app;
+};
+
+LogPaths MakeLogPaths() {
+  LogPaths p;
+  wchar_t home[MAX_PATH] = {0};
+  DWORD n = GetEnvironmentVariableW(L"USERPROFILE", home, MAX_PATH);
+  if (n > 0 && n < MAX_PATH) {
+    std::wstring dir = std::wstring(home) + L"\\.daohui";
+    CreateDirectoryW(dir.c_str(), NULL);
+    dir += L"\\logs";
+    CreateDirectoryW(dir.c_str(), NULL);
+    p.file = dir + L"\\frontend.log";
+    p.old_file = dir + L"\\frontend.old.log";
+  }
+  wchar_t exe[MAX_PATH] = {0};
+  GetModuleFileNameW(NULL, exe, MAX_PATH);
+  const wchar_t* base = wcsrchr(exe, L'\\');
+  p.app = base ? base + 1 : exe;
+  return p;
+}
 }  // namespace
+
+// DaoHui: one line per request that failed and per key that went to the
+// application because of it, so that "the keys came out as letters" can be
+// told apart afterwards (the server's log only sees what reached it). Written
+// only when something went wrong. %USERPROFILE%\.daohui\logs, not %TEMP% or
+// %AppData%: packaged (MSIX) applications write those to a private copy.
+void weasel::LogEvent(const wchar_t* fmt, ...) {
+  const DWORD saved_error = GetLastError();
+  static const LogPaths paths = MakeLogPaths();  // (thread-safe init)
+  if (paths.file.empty())
+    return;
+  wchar_t msg[400];
+  va_list ap;
+  va_start(ap, fmt);
+  _vsnwprintf_s(msg, _TRUNCATE, fmt, ap);
+  va_end(ap);
+  SYSTEMTIME t;
+  GetLocalTime(&t);
+  wchar_t line[600];
+  swprintf_s(line, L"%04u-%02u-%02u %02u:%02u:%02u.%03u %lu %ls: %ls\n",
+             t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond,
+             t.wMilliseconds, GetCurrentProcessId(), paths.app.c_str(), msg);
+  char utf8[1800];
+  int len = WideCharToMultiByte(CP_UTF8, 0, line, -1, utf8, sizeof(utf8),
+                                NULL, NULL);
+  if (len > 1) {
+    WIN32_FILE_ATTRIBUTE_DATA info;
+    if (GetFileAttributesExW(paths.file.c_str(), GetFileExInfoStandard,
+                             &info) &&
+        (info.nFileSizeHigh || info.nFileSizeLow > kLogMaxBytes))
+      MoveFileExW(paths.file.c_str(), paths.old_file.c_str(),
+                  MOVEFILE_REPLACE_EXISTING);
+    HANDLE h = CreateFileW(paths.file.c_str(), FILE_APPEND_DATA,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h != INVALID_HANDLE_VALUE) {
+      DWORD written = 0;
+      WriteFile(h, utf8, static_cast<DWORD>(len - 1), &written, NULL);
+      CloseHandle(h);
+    }
+  }
+  SetLastError(saved_error);
+}
 
 ClientImpl::ClientImpl()
     : session_id(0),
@@ -252,12 +324,20 @@ LRESULT ClientImpl::_SendMessage(WEASEL_IPC_COMMAND Msg,
     PipeMessage req{Msg, wParam, lParam};
     return channel.Transact(req);
   } catch (DWORD ex) {
+    const ULONGLONG waited = ::GetTickCount64() - now;
     if (ex == PipeChannelBase::kTimeout) {
       timed_out = true;
       if (light)
         light_paused_until = ::GetTickCount64() + kLightPause;
       else
         paused_until = ::GetTickCount64() + kPause;
+      LogEvent(L"request %d (0x%lx) got no answer in %llu ms; %ls requests "
+               L"skipped for %llu ms",
+               (int)Msg, wParam, waited, light ? L"light" : L"all",
+               light ? kLightPause : kPause);
+    } else {
+      LogEvent(L"request %d (0x%lx) failed after %llu ms: error %lu", (int)Msg,
+               wParam, waited, ex);
     }
     return 0;
   }
