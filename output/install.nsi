@@ -360,8 +360,15 @@ program_files:
   ; Write autorun key
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "DaoHuiServer" "$INSTDIR\DaoHuiServer.exe"
   SetRegView 32
-  ; Start DaoHuiServer
-  Exec "$INSTDIR\DaoHuiServer.exe"
+  ; Start DaoHuiServer as the signed-in user, not elevated: Exec from this
+  ; elevated installer (automatic updates included) ran the server elevated
+  ; until the next sign-in, with the user's learning data written by an
+  ; administrator process. Explorer starts what it is given as the user who
+  ; runs the shell (as for the settings app, StartFirstRun). Without a
+  ; running shell nothing starts here; the Run key starts the server at the
+  ; next sign-in, and the input method starts it as the user when it finds
+  ; no server (start_service.bat).
+  Exec '"$WINDIR\explorer.exe" "$INSTDIR\DaoHuiServer.exe"'
 
   ; option CheckForUpdates (WinSparkle registry path, see DaoHuiBrand.h).
   ; DaoHui: not asked. A first install turns the checks on; an update keeps
