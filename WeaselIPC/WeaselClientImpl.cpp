@@ -150,17 +150,18 @@ void ClientImpl::ShutdownServer() {
 }
 
 bool ClientImpl::ProcessKeyEvent(KeyEvent const& keyEvent) {
-  if (!_Active())
+  // (Key 0 is the status probe of WeaselTSF::OnSetThreadFocus: light.)
+  const bool light = keyEvent.keycode == 0;
+  if (!_Ready(light))
     return false;
 
-  // (Key 0 is the status probe of WeaselTSF::OnSetThreadFocus: light.)
   LRESULT ret = _SendMessage(WEASEL_IPC_PROCESS_KEY_EVENT, keyEvent, session_id,
-                             keyEvent.keycode == 0);
+                             light);
   return ret != 0;
 }
 
 bool ClientImpl::CommitComposition() {
-  if (!_Active())
+  if (!_Ready(false))
     return false;
 
   LRESULT ret = _SendMessage(WEASEL_IPC_COMMIT_COMPOSITION, 0, session_id);
@@ -168,7 +169,7 @@ bool ClientImpl::CommitComposition() {
 }
 
 bool ClientImpl::ClearComposition() {
-  if (!_Active())
+  if (!_Ready(false))
     return false;
 
   LRESULT ret = _SendMessage(WEASEL_IPC_CLEAR_COMPOSITION, 0, session_id);
@@ -176,7 +177,7 @@ bool ClientImpl::ClearComposition() {
 }
 
 bool ClientImpl::SelectCandidateOnCurrentPage(size_t index) {
-  if (!_Active())
+  if (!_Ready(false))
     return false;
   LRESULT ret = _SendMessage(WEASEL_IPC_SELECT_CANDIDATE_ON_CURRENT_PAGE, index,
                              session_id);
@@ -184,7 +185,7 @@ bool ClientImpl::SelectCandidateOnCurrentPage(size_t index) {
 }
 
 bool ClientImpl::HighlightCandidateOnCurrentPage(size_t index) {
-  if (!_Active())
+  if (!_Ready(false))
     return false;
   LRESULT ret = _SendMessage(WEASEL_IPC_HIGHLIGHT_CANDIDATE_ON_CURRENT_PAGE,
                              index, session_id);
@@ -192,14 +193,14 @@ bool ClientImpl::HighlightCandidateOnCurrentPage(size_t index) {
 }
 
 bool ClientImpl::ChangePage(bool backward) {
-  if (!_Active())
+  if (!_Ready(false))
     return false;
   LRESULT ret = _SendMessage(WEASEL_IPC_CHANGE_PAGE, backward, session_id);
   return ret != 0;
 }
 
 void ClientImpl::UpdateInputPosition(RECT const& rc) {
-  if (!_Active())
+  if (!_Ready(true))
     return;
   /*
   移位标志 = 1bit == 0
@@ -238,8 +239,16 @@ void ClientImpl::TrayCommand(UINT menuId) {
 }
 
 void ClientImpl::StartSession() {
-  if (_Active() && Echo(false))
-    return;
+  if (_Active()) {
+    if (Echo(false))
+      return;  // the server still has this session
+    // DaoHui: the echo timed out: the server is late, not gone, and may
+    // still have the session. It is kept, to be asked about again on the
+    // next reconnect, after the pause (0.17.4.20 went on to start a new
+    // session, which was skipped as paused: session 0, the old one lost).
+    if (timed_out)
+      return;
+  }
 
   _WriteClientInfo();
   UINT ret = _SendMessage(WEASEL_IPC_START_SESSION, 0, 0);
@@ -262,11 +271,31 @@ void ClientImpl::EndMaintenance() {
 }
 
 bool ClientImpl::Echo(bool light) {
-  if (!_Active())
+  if (!_Ready(light))
     return false;
 
   UINT serverEcho = _SendMessage(WEASEL_IPC_ECHO, 0, session_id, light);
   return (serverEcho == session_id);
+}
+
+bool ClientImpl::_Paused(bool light) const {
+  const ULONGLONG now = ::GetTickCount64();
+  return now < paused_until || (light && now < light_paused_until);
+}
+
+// DaoHui: a request that timed out closed the pipe (PipeChannel.h), and the
+// next ones are not sent: no pipe. Such a request counts as late while
+// requests are still skipped after the one that timed out, and as failed
+// once that pause is over, so that WeaselTSF::_EnsureServerConnected opens
+// the pipe again (StartSession keeps the session when the server still has
+// it). Up to 0.17.4.20 timed_out stayed as the timed-out request had left it:
+// late for ever, no reconnect, and every key went to the application until
+// the input method was switched (Claude.exe, 2026-11-27).
+bool ClientImpl::_Ready(bool light) {
+  if (_Active())
+    return true;
+  timed_out = _Paused(light);
+  return false;
 }
 
 bool ClientImpl::GetResponseData(ResponseHandler const& handler) {
@@ -313,9 +342,8 @@ LRESULT ClientImpl::_SendMessage(WEASEL_IPC_COMMAND Msg,
   if (light)
     timeout = kLight;
   timed_out = false;
-  ULONGLONG now = ::GetTickCount64();
-  if (timeout != INFINITE &&
-      (now < paused_until || (light && now < light_paused_until))) {
+  const ULONGLONG now = ::GetTickCount64();
+  if (timeout != INFINITE && _Paused(light)) {
     timed_out = true;
     return 0;
   }

@@ -429,6 +429,18 @@ void ServerImpl::HandlePipeMessage(PipeMessage pipe_msg, _Resp resp) {
       resp(0);
       answered = true;
       break;
+    case WEASEL_IPC_TRAY_COMMAND:
+      // DaoHui: so are the language bar's commands: the client waits 200 ms
+      // and does not look at the answer. "Redeploy" starts the deployer in
+      // 110-190 ms, at times more, and then the client gave up and closed
+      // its pipe (Explorer 2026-11-26, Claude.exe 2026-11-27). A command
+      // runs even when its client has given up (answering it throws).
+      try {
+        resp(TRUE);
+      } catch (...) {
+      }
+      answered = true;
+      break;
     default:
       break;
   }

@@ -188,8 +188,9 @@ then the status probe, key 0) → `ReadFile` on the pipe.
   and counts as failed: a key goes to the application, `GetResponseData` gives
   nothing. Then requests are skipped for a while instead of each waiting again (light
   ones for 2 s after a light one timed out, all for 3 s after any other), and
-  `_EnsureServerConnected` neither reconnects (a new session each time) nor restarts a
-  server that is there but slow (`Client::TimedOut`). Also fixed: after a failed write
+  meanwhile `_EnsureServerConnected` neither reconnects nor restarts a server that is
+  there but slow (`Client::TimedOut`; up to 0.17.4.20 "meanwhile" was for ever, see
+  0.17.4.21 below). Also fixed: after a failed write
   a client wrote again to the pipe it had just closed, and a server whose client had
   gone connected to itself.
 - **Server**: the tray icon is refreshed in the main thread (posted command 40090).
@@ -240,6 +241,39 @@ the keys went by paths that wrote nothing.
   ids were handed out again and a client holding an old one could land in another
   application's session); `FindSession` no longer adds empty map entries. Logs
   (`rime.daohui.*.log`) are kept for 7 days.
+
+## After a request timed out (0.17.4.21)
+
+One request that got no answer in time left every later key of that application going
+to the application, until the input method was switched. On 2026-11-27 the language
+bar's "redeploy" in Claude.exe waited 203 ms (`request 32781 (0x9c42) got no answer`),
+and the next 101 keys, over 80 s, were all logged `server late (echo)`.
+
+- **Client** (`WeaselClientImpl.cpp`): the timeout closes the pipe, so `_Active()` is
+  false, and `Echo` (like every request that needs a session) returned false without
+  sending anything, leaving `timed_out` as the timed-out request had set it: true.
+  `_EnsureServerConnected` took that for "late" for ever. Now such a request sets
+  `timed_out` to whether requests are still paused (`_Ready`, `_Paused`): late during
+  the pause (the key goes to the application, no reconnect), failed after it, and then
+  `_EnsureServerConnected` opens the pipe again. A light timeout does not pause keys, so
+  the next key reconnects at once. `StartSession` first echoes the old session id and
+  keeps the session when the server still has it; when that echo times out too, the
+  session is kept for the next try (it went on to a new session, skipped as paused:
+  session 0, the old one lost). A reconnect that timed out is not counted towards
+  running `start_service.bat` (the server is there, only late).
+- **Server** (`WeaselServerImpl.cpp`): the language bar's commands (TrayCommand) are
+  answered before they run, like focus changes: the client waits 200 ms and ignores the
+  answer, and "redeploy" takes 110-190 ms and at times more to start the deployer (the
+  timed-out ones are not in `DaoHuiServer.slow.log`: answering a client that has gone
+  throws, so the request was never logged). A command still runs when its client has
+  given up.
+- **Test** (`test\TestIpcTimeout\run.bat`, x64, needs the VS 2022 Build Tools): builds
+  the client from its sources against a fake server, and the real server's dispatch
+  (`Run()` without `Start()`), each on a pipe of the test's own; DaoHuiServer and the
+  real logs are never touched. Before the fix: 4 failed (keys after a light timeout,
+  and after the pause, never taken again); the kept session and both server checks
+  fail when their part of the fix is taken out (the old server answered the 500 ms
+  command in 203 ms, as in the real trace).
 
 ## Building
 

@@ -41,13 +41,19 @@ class ClientImpl {
 
   bool _Connected() const { return channel.Connected(); }
   bool _Active() const { return channel.Connected() && session_id != 0; }
+  // DaoHui: requests are still skipped after one timed out.
+  bool _Paused(bool light) const;
+  // DaoHui: _Active(), and when not, timed_out set for the request that is
+  // not sent (see the definition).
+  bool _Ready(bool light);
 
  private:
   UINT session_id;
   std::wstring app_name;
   bool is_ime;
-  // DaoHui: the last request got no answer in time (or was skipped), and
-  // until when requests are skipped after one timed out.
+  // DaoHui: the last request got no answer in time (or was skipped, or not
+  // sent while requests are paused), and until when requests are skipped
+  // after one timed out.
   bool timed_out;
   ULONGLONG paused_until;
   ULONGLONG light_paused_until;

@@ -274,13 +274,19 @@ static unsigned int retry = 0;
 bool WeaselTSF::_EnsureServerConnected() {
   if (!m_client.Echo()) {
     // DaoHui: a server that is there but answers late is neither reconnected
-    // to (a new session each time) nor started again; the key goes to the
-    // application.
+    // to nor started again while requests are paused after a timeout (Echo
+    // counts as late then); the key goes to the application. Once the pause
+    // is over, Echo fails as not sent, and the pipe the timeout closed is
+    // opened again here (the session kept when the server still has it).
     if (m_client.TimedOut())
       return false;
-    weasel::LogEvent(L"echo failed: reconnecting (a new session), try %u",
-                     retry + 1);
+    weasel::LogEvent(L"echo failed: reconnecting, try %u", retry + 1);
     _Reconnect();
+    // DaoHui: a reconnect the server answered late is no sign that it has
+    // gone: not counted towards starting it again. The first key after the
+    // pause tries again.
+    if (m_client.TimedOut())
+      return false;
     retry++;
     if (retry >= 6) {
       HANDLE hMutex = CreateMutex(NULL, TRUE, DAOHUI_DEPLOYER_EXCLUSIVE_MUTEX_W);
