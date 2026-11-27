@@ -33,6 +33,7 @@ int WeaselServerApp::Run() {
   m_ui.Create(m_server.GetHWnd());
 
   m_handler->Initialize();
+  m_handler->WarmUpIfIdle();  // DaoHui (RimeWithWeasel.cpp)
   // DaoHui: requests are handled in the pipe threads, under a lock all of
   // them share, and Shell_NotifyIcon waits for Explorer's taskbar thread
   // (up to 4 s). That thread may itself be waiting for this server (a TSF

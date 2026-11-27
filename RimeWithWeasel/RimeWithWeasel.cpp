@@ -7,6 +7,7 @@
 #include <boost/algorithm/string.hpp>
 #include <vector>
 
+#include <chrono>
 #include <filesystem>
 #include <map>
 #include <regex>
@@ -32,21 +33,30 @@ typedef enum { COLOR_ABGR = 0, COLOR_ARGB, COLOR_RGBA } ColorFormat;
 using namespace weasel;
 
 static RimeApi* rime_api;
-WeaselSessionId _GenerateNewWeaselSessionId(SessionStatusMap sm, DWORD pid) {
-  if (sm.empty())
-    return (WeaselSessionId)(pid + 1);
-  return (WeaselSessionId)(sm.rbegin()->first + 1);
+
+// DaoHui: never 0 (a client without a session), never one in use, and never
+// one handed out before by this server (see m_last_ipc_id).
+WeaselSessionId RimeWithWeaselHandler::_NextIpcId() {
+  do {
+    ++m_last_ipc_id;
+  } while (m_last_ipc_id == 0 || m_session_status_map.count(m_last_ipc_id));
+  return m_last_ipc_id;
 }
 
 int expand_ibus_modifier(int m) {
   return (m & 0xff) | ((m & 0xff00) << 16);
 }
 
+// DaoHui: logs are kept for a week (stock kept today's only, and the server
+// is restarted every two hours by the learning-data backup, so an error was
+// gone before anyone could look at it).
 static void CleanOldLogs() {
   char ymd[12] = {0};
   time_t now = time(NULL);
   strftime(ymd, sizeof(ymd), ".%Y%m%d", localtime(&now));
   std::string today(ymd);
+  const auto keep_since =
+      fs::file_time_type::clock::now() - std::chrono::hours(24 * 7);
   const std::string app_name = DAOHUI_LOG_APP_NAME;
   std::string dir = WeaselLogPath().string();
   if (!fs::exists(fs::path(dir)))
@@ -56,10 +66,12 @@ static void CleanOldLogs() {
     // preparing files
     for (const auto& entry : fs::directory_iterator(dir)) {
       const std::string& file_name(entry.path().filename().string());
+      std::error_code ec;
       if (entry.is_regular_file() && !entry.is_symlink() &&
           boost::starts_with(file_name, app_name) &&
           boost::ends_with(file_name, ".log") &&
-          !boost::contains(file_name, today)) {
+          !boost::contains(file_name, today) &&
+          fs::last_write_time(entry.path(), ec) < keep_since && !ec) {
         files.push_back(entry.path());
       }
     }
@@ -83,7 +95,8 @@ RimeWithWeaselHandler::RimeWithWeaselHandler(UI* ui)
       m_current_dark_mode(false),
       m_global_ascii_mode(false),
       m_show_notifications_time(1200),
-      _UpdateUICallback(NULL) {
+      _UpdateUICallback(NULL),
+      m_keeper_session(0) {
   rime_api = rime_get_api();
   assert(rime_api);
   m_pid = GetCurrentProcessId();
@@ -95,6 +108,9 @@ RimeWithWeaselHandler::RimeWithWeaselHandler(UI* ui)
     }
   }
   m_pid = (m_pid << (31 - msbit));
+  // (The first id is m_pid + 1, as stock's first: each server process starts
+  // from its own base.)
+  m_last_ipc_id = m_pid;
   _Setup();
 }
 
@@ -189,10 +205,45 @@ void RimeWithWeaselHandler::Initialize() {
   m_last_schema_id.clear();
 }
 
+// DaoHui: see m_keeper_session. Called by WeaselServerApp::Run after
+// Initialize, before the server listens: for about a second every key would
+// get no server, so only when nobody has typed for a while (the backup task
+// that restarts the server waits for 2 minutes without input). Not after
+// maintenance: END_MAINTENANCE holds the lock every request takes, and a key
+// whose Echo waited a second there would go to the application as a letter;
+// the first AddSession makes it then, within the time a client gives a new
+// session (as stock did for its own first session).
+void RimeWithWeaselHandler::WarmUpIfIdle() {
+  LASTINPUTINFO last_input = {sizeof(last_input)};
+  if (GetLastInputInfo(&last_input) &&
+      ::GetTickCount() - last_input.dwTime > kKeeperIdleMs)
+    _CreateKeeperSession("server start");
+}
+
+void RimeWithWeaselHandler::_CreateKeeperSession(const char* when) {
+  if (m_disabled || m_keeper_session)
+    return;
+  const ULONGLONG start = ::GetTickCount64();
+  m_keeper_session = rime_api->create_session();
+  LOG(INFO) << "Warm-up session (" << when << ") "
+            << (m_keeper_session ? "created" : "failed") << " in "
+            << (::GetTickCount64() - start) << " ms.";
+  // (The schema and option notifications its creation sent are nobody's to
+  // show: left here, the next _UpdateUI of a client would pop them up.)
+  m_message_type.clear();
+  m_message_value.clear();
+  m_message_label.clear();
+  m_option_name.clear();
+}
+
 void RimeWithWeaselHandler::Finalize() {
   m_active_session = 0;
   m_disabled = true;
   m_session_status_map.clear();
+  if (m_keeper_session) {
+    rime_api->destroy_session(m_keeper_session);
+    m_keeper_session = 0;
+  }
   daohui::StopFixServer();
   LOG(INFO) << "Finalizing la rime.";
   rime_api->finalize();
@@ -201,8 +252,13 @@ void RimeWithWeaselHandler::Finalize() {
 DWORD RimeWithWeaselHandler::FindSession(WeaselSessionId ipc_id) {
   if (m_disabled)
     return 0;
-  Bool found = rime_api->find_session(to_session_id(ipc_id));
-  DLOG(INFO) << "Find session: session_id = " << to_session_id(ipc_id)
+  // DaoHui: looked up without adding an empty entry for an unknown id (each
+  // Echo with an id from before maintenance used to leave one behind).
+  auto it = m_session_status_map.find(ipc_id);
+  if (it == m_session_status_map.end())
+    return 0;
+  Bool found = rime_api->find_session(it->second.session_id);
+  DLOG(INFO) << "Find session: session_id = " << it->second.session_id
              << ", found = " << found;
   return found ? (ipc_id) : 0;
 }
@@ -214,6 +270,9 @@ DWORD RimeWithWeaselHandler::AddSession(LPWSTR buffer, EatLine eat) {
     if (m_disabled)
       return 0;
   }
+  // DaoHui: (before the client's own session, so that its notifications
+  // are the ones shown)
+  _CreateKeeperSession("first session");
   RimeSessionId session_id = (RimeSessionId)rime_api->create_session();
   // DaoHui: this server answers Ctrl+R (lua/asus_fix.lua, DaoHuiAI.cpp).
   rime_api->set_option(session_id, "_asus_fix", True);
@@ -227,8 +286,7 @@ DWORD RimeWithWeaselHandler::AddSession(LPWSTR buffer, EatLine eat) {
     }
   }
 
-  WeaselSessionId ipc_id =
-      _GenerateNewWeaselSessionId(m_session_status_map, m_pid);
+  WeaselSessionId ipc_id = _NextIpcId();
   DLOG(INFO) << "Add session: created session_id = " << session_id
              << ", ipc_id = " << ipc_id;
   SessionStatus& session_status = new_session_status(ipc_id);

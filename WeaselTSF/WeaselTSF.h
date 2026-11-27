@@ -105,7 +105,8 @@ class WeaselTSF : public ITfTextInputProcessorEx,
   // STDMETHODIMP OnChange(_In_ REFGUID guid);
 
   /* Compartments */
-  BOOL _IsKeyboardDisabled();
+  // (why, when given and the keyboard is disabled: which check said so)
+  BOOL _IsKeyboardDisabled(const wchar_t** why = nullptr);
   BOOL _IsKeyboardOpen();
   HRESULT _SetKeyboardOpen(BOOL fOpen);
   HRESULT _GetCompartmentDWORD(DWORD& value, const GUID guid);
@@ -263,6 +264,10 @@ class WeaselTSF : public ITfTextInputProcessorEx,
   // the composition an end session has been requested for; identity only,
   // never dereferenced (see _EndComposition)
   ITfComposition* _pEndingComposition = nullptr;
+  // DaoHui: when that end was requested, and whether a composition still
+  // waiting for it long after has been logged
+  DWORD _endingSince = 0;
+  BOOL _endingStuckLogged = FALSE;
   std::wstring _shownText;
   BOOL _shownKnown = FALSE;
   BOOL _isToOpenClose = false;

@@ -203,6 +203,44 @@ then the status probe, key 0) → `ReadFile` on the pipe.
 - Requests that took 100 ms or more (waiting for the lock included) are written to
   `DaoHuiServer.slow.log` in the log folder (`%TEMP%\rime.daohui`), at most 1 MB.
 
+## Keys that go to the application, and the first session (0.17.4.20)
+
+Users saw raw keystrokes (letters and digits) or nothing at all while the indicator
+said Chinese, until they switched input method; `frontend.log` showed no timeouts, so
+the keys went by paths that wrote nothing.
+
+- **Caps Lock** (`KeyEventSink.cpp`): when Rime has used Caps Lock and the light came
+  on, the front end presses Caps Lock again (`SendInput`) to turn it off and counts the
+  injected events in `keyCountToSimulate`. Stock skipped *every* key while the count was
+  not 0, so an injected event that never came back left every key of the process going
+  to the application, unlogged. Only Caps Lock events are skipped now. The count is not
+  given up after a time (an injected press handled late would reach Rime and switch the
+  mode back); a lost one costs one later Caps Lock press at most.
+- **Logged now** (`weasel::LogEvent`, `%USERPROFILE%\.daohui\logs\frontend.log`):
+  printable key presses that go to the application because the keyboard is closed or
+  disabled (and which check said so), because Rime did not take them in Chinese mode
+  while not composing (Caps Lock / Shift noted), or because the key is unknown: one
+  line per reason and thread, then at most one a minute with a count. Also: every
+  deactivation of the text service with the keys held (tells Ctrl+Space or Win+Space
+  from the input menu), an activation step that failed, a composition still not ended
+  2 s after its end was requested, an end session that could not be requested.
+- `Deactivate` now takes back the thread focus sink (stock never did, so a deactivated
+  instance kept receiving focus changes); `_EnsureServerConnected`'s `retry` counts
+  failures in a row.
+- **Server** (`RimeWithWeasel.cpp`): the first session after librime starts costs about
+  1 s (schema, Lua components with their one-time setup, dictionaries, language model;
+  measured 0.94-1.0 s, later sessions 5 ms), and stock paid it under the request lock on
+  someone's first key after every server start or maintenance. A *keeper* session, never
+  given to a client, is created at server start (`WarmUpIfIdle`, before the pipe
+  listens) when there has been no input for 3 s (the backup task restarts the server
+  after 2 minutes without input), otherwise by the first `AddSession`; never under
+  END_MAINTENANCE, whose lock hold would make a waiting Echo time out and its key come
+  out as a letter. `Finalize` destroys it. ipc session ids come from
+  a counter that only grows (stock took map max + 1, and maintenance empties the map, so
+  ids were handed out again and a client holding an old one could land in another
+  application's session); `FindSession` no longer adds empty map entries. Logs
+  (`rime.daohui.*.log`) are kept for 7 days.
+
 ## Building
 
 Requirements (already on the development machine):

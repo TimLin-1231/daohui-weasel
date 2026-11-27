@@ -87,20 +87,25 @@ HRESULT CCompartmentEventSink::_Unadvise() {
   return hr;
 }
 
-BOOL WeaselTSF::_IsKeyboardDisabled() {
+BOOL WeaselTSF::_IsKeyboardDisabled(const wchar_t** why) {
   ITfCompartmentMgr* pCompMgr = NULL;
   ITfDocumentMgr* pDocMgrFocus = NULL;
   ITfContext* pContext = NULL;
   BOOL fDisabled = FALSE;
+  // DaoHui: which check decided (for the log of keys that went to the
+  // application); the decisions themselves are stock's.
+  const wchar_t* reason = L"";
 
   if ((_pThreadMgr->GetFocus(&pDocMgrFocus) != S_OK) ||
       (pDocMgrFocus == NULL)) {
     fDisabled = TRUE;
+    reason = L"no focused document";
     goto Exit;
   }
 
   if ((pDocMgrFocus->GetTop(&pContext) != S_OK) || (pContext == NULL)) {
     fDisabled = TRUE;
+    reason = L"the focused document has no context";
     goto Exit;
   }
 
@@ -114,8 +119,10 @@ BOOL WeaselTSF::_IsKeyboardDisabled() {
                                  &pCompartmentDisabled) == S_OK) {
       VARIANT var;
       if (pCompartmentDisabled->GetValue(&var) == S_OK) {
-        if (var.vt == VT_I4)  // Even VT_EMPTY, GetValue() can succeed
+        if (var.vt == VT_I4) {  // Even VT_EMPTY, GetValue() can succeed
           fDisabled = (BOOL)var.lVal;
+          reason = L"the context has the keyboard disabled";
+        }
       }
       pCompartmentDisabled->Release();
     }
@@ -125,8 +132,10 @@ BOOL WeaselTSF::_IsKeyboardDisabled() {
                                  &pCompartmentEmptyContext) == S_OK) {
       VARIANT var;
       if (pCompartmentEmptyContext->GetValue(&var) == S_OK) {
-        if (var.vt == VT_I4)  // Even VT_EMPTY, GetValue() can succeed
+        if (var.vt == VT_I4) {  // Even VT_EMPTY, GetValue() can succeed
           fDisabled = (BOOL)var.lVal;
+          reason = L"the context is an empty one";
+        }
       }
       pCompartmentEmptyContext->Release();
     }
@@ -134,6 +143,8 @@ BOOL WeaselTSF::_IsKeyboardDisabled() {
   }
 
 Exit:
+  if (why && fDisabled)
+    *why = reason;
   if (pContext)
     pContext->Release();
   if (pDocMgrFocus)

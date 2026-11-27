@@ -30,6 +30,10 @@ void TsfDebugLog(const wchar_t* fmt, ...) {
   }
 }
 
+// DaoHui: a composition whose end was requested this long ago and has still
+// not ended is logged (weasel::LogEvent), once per composition.
+static constexpr DWORD kEndingStuckMs = 2000;
+
 /* Start Composition */
 class CStartCompositionEditSession : public CEditSession {
  public:
@@ -169,9 +173,20 @@ void WeaselTSF::_EndComposition(com_ptr<ITfContext> pContext, BOOL clear) {
   // one kept.
   if (_pComposition != nullptr && _pComposition.p == _pEndingComposition) {
     TsfDebugLog(L"end requested again for the same composition: ignored (clear=%d)", clear);
+    // DaoHui: an end that never ran leaves keys eaten with nothing shown
+    // (the preedit of a composition marked as ending is not written).
+    const DWORD waited = GetTickCount() - _endingSince;
+    if (!_endingStuckLogged && waited > kEndingStuckMs) {
+      _endingStuckLogged = TRUE;
+      weasel::LogEvent(L"composition still not ended %lu ms after its end was "
+                       L"requested",
+                       waited);
+    }
     return;
   }
   _pEndingComposition = _pComposition.p;
+  _endingSince = GetTickCount();
+  _endingStuckLogged = FALSE;
 
   _cand->EndUI();
   if ((pEditSession = new CEndCompositionEditSession(
@@ -182,6 +197,9 @@ void WeaselTSF::_EndComposition(com_ptr<ITfContext> pContext, BOOL clear) {
                                      &hr);
     TsfDebugLog(L"end requested: clear=%d request=%08x session=%08x", clear,
                 hrRequest, hr);
+    if (FAILED(hrRequest))
+      weasel::LogEvent(L"end of composition could not be requested: %08lx",
+                       (unsigned long)hrRequest);
     pEditSession->Release();
   }
 }

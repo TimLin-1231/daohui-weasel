@@ -7,6 +7,69 @@
 static weasel::KeyEvent prevKeyEvent;
 static BOOL prevfEaten = FALSE;
 static int keyCountToSimulate = 0;
+// DaoHui: when the Caps Lock presses counted by keyCountToSimulate were sent.
+static DWORD capsSentTick = 0;
+
+/* Caps Lock (DaoHui).
+ * When Rime has used Caps Lock (to switch between Chinese and English) and
+ * the light came on, the Caps Lock branch of _ProcessKeyEvent presses Caps
+ * Lock again with SendInput to turn it off, and keyCountToSimulate counts the
+ * injected events, which are not Rime's to see. Stock skipped every key while
+ * that count was not 0: when an injected event never came back to this text
+ * service (the focus moved to another thread, a keyboard hook took it), every
+ * following key of the process went to the application as it was typed,
+ * unlogged, with the indicator still on Chinese, until Caps Lock was pressed
+ * again. Now only Caps Lock events are skipped: an injected press that never
+ * comes back costs one later Caps Lock press at most, which then only
+ * toggles the light and leaves Rime's mode as it is, as in stock (if the
+ * light comes on, Rime leaves the keys to the application, logged, until
+ * Caps Lock is pressed again). The count is not given up after a time: an
+ * injected press handled late, behind a busy application, would then reach
+ * Rime and switch the mode back. A Caps Lock skipped more than kCapsLateMs
+ * after the injection is logged.
+ */
+namespace {
+constexpr DWORD kCapsLateMs = 1500;
+
+/* Keys that go to the application although DaoHui is on, for a reason that
+ * leaves no other trace (DaoHui). Printable key presses only (no Ctrl, Alt or
+ * Win held): one line per reason at first, then at most one per
+ * kQuietPassLogMs and thread, with the number of such keys in between. */
+enum QuietPass { kPassClosed, kPassDisabled, kPassNotTaken, kPassUnknown, kPassReasons };
+constexpr DWORD kQuietPassLogMs = 60000;
+thread_local DWORD tQuietPassLogged[kPassReasons] = {};
+thread_local unsigned tQuietPassSince[kPassReasons] = {};
+
+bool IsPrintableKeyPress(WPARAM vk, LPARAM lParam) {
+  if ((static_cast<DWORD>(lParam) >> 31) & 1)
+    return false;  // a release
+  if ((GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_MENU) & 0x8000) ||
+      (GetKeyState(VK_LWIN) & 0x8000) || (GetKeyState(VK_RWIN) & 0x8000))
+    return false;
+  // (Space and the numeric keypad go to the application in normal use.)
+  return (vk >= '0' && vk <= '9') || (vk >= 'A' && vk <= 'Z') ||
+         (vk >= VK_OEM_1 && vk <= VK_OEM_3) ||
+         (vk >= VK_OEM_4 && vk <= VK_OEM_7);
+}
+
+void LogQuietPass(QuietPass reason, WPARAM vk, LPARAM lParam,
+                  const wchar_t* why) {
+  if (!IsPrintableKeyPress(vk, lParam))
+    return;
+  const DWORD now = GetTickCount();
+  if (tQuietPassLogged[reason] &&
+      now - tQuietPassLogged[reason] < kQuietPassLogMs) {
+    ++tQuietPassSince[reason];
+    return;
+  }
+  weasel::LogEvent(
+      L"key 0x%02x went to the application: %ls (%u more like it since the "
+      L"last line)",
+      (unsigned)vk, why, tQuietPassSince[reason]);
+  tQuietPassLogged[reason] = now | 1;
+  tQuietPassSince[reason] = 0;
+}
+}  // namespace
 
 /* Paste while composing.
  * Ctrl+V (Ctrl+Shift+V, Shift+Insert) while composing: Rime commits what is
@@ -147,8 +210,15 @@ void WeaselTSF::_ReplayPasteKey(const wchar_t* why) {
 void WeaselTSF::_ProcessKeyEvent(WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
   // when _IsKeyboardDisabled don't eat the key,
   // when keyboard closable and keyboard closed, don't eat the key
-  if ((_isToOpenClose && !_IsKeyboardOpen()) || _IsKeyboardDisabled()) {
+  if (_isToOpenClose && !_IsKeyboardOpen()) {
     *pfEaten = FALSE;
+    LogQuietPass(kPassClosed, wParam, lParam, L"the keyboard is closed");
+    return;
+  }
+  const wchar_t* disabled = L"";
+  if (_IsKeyboardDisabled(&disabled)) {
+    *pfEaten = FALSE;
+    LogQuietPass(kPassDisabled, wParam, lParam, disabled);
     return;
   }
 
@@ -164,6 +234,7 @@ void WeaselTSF::_ProcessKeyEvent(WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
   if (!ConvertKeyEvent(static_cast<UINT>(wParam), lParam, _lpbKeyState, ke)) {
     /* Unknown key event */
     *pfEaten = FALSE;
+    LogQuietPass(kPassUnknown, wParam, lParam, L"not a key Rime knows");
   } else {
     // cheet key code when vertical auto reverse happened, swap up and down
     if (_cand->GetIsReposition()) {
@@ -172,13 +243,31 @@ void WeaselTSF::_ProcessKeyEvent(WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
       else if (ke.keycode == ibus::Down)
         ke.keycode = ibus::Up;
     }
-    if (!keyCountToSimulate) {
+    if (keyCountToSimulate && ke.keycode == ibus::Caps_Lock &&
+        !(ke.mask & ibus::RELEASE_MASK) &&
+        GetTickCount() - capsSentTick > kCapsLateMs)
+      weasel::LogEvent(L"caps lock: skipped as the one sent to turn the light "
+                       L"off, %lu ms after it was sent",
+                       GetTickCount() - capsSentTick);
+    if (!keyCountToSimulate || ke.keycode != ibus::Caps_Lock) {
       const bool wasComposing = _status.composing || _IsComposing();
       *pfEaten = (BOOL)m_client.ProcessKeyEvent(ke);
       if (!*pfEaten && m_client.TimedOut())
         LogPassedKey(wParam, lParam, L"server late (key)");
       else if (!*pfEaten && wasComposing)
         LogPassedKey(wParam, lParam, L"server did not take it while composing");
+      else if (!*pfEaten && !_status.ascii_mode) {
+        const bool caps = (GetKeyState(VK_CAPITAL) & 0x01) != 0;
+        const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        LogQuietPass(kPassNotTaken, wParam, lParam,
+                     caps && shift ? L"Rime did not take it in Chinese mode "
+                                     L"(Caps Lock on, Shift held)"
+                     : caps        ? L"Rime did not take it in Chinese mode "
+                                     L"(Caps Lock on)"
+                     : shift       ? L"Rime did not take it in Chinese mode "
+                                     L"(Shift held)"
+                                   : L"Rime did not take it in Chinese mode");
+      }
       if (!(ke.mask & ibus::RELEASE_MASK) && _IsPasteKey(wParam)) {
         const bool sentAgain =
             _pasteSentTick && GetTickCount() - _pasteSentTick < kPasteHoldMs;
@@ -196,12 +285,23 @@ void WeaselTSF::_ProcessKeyEvent(WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
         if ((GetKeyState(VK_CAPITAL) & 0x01)) {
           if (_committed || (!*pfEaten && _status.composing)) {
             keyCountToSimulate = 2;
+            capsSentTick = GetTickCount();
             INPUT inputs[2];
             inputs[0].type = INPUT_KEYBOARD;
             inputs[0].ki = {VK_CAPITAL, 0, 0, 0, 0};
             inputs[1].type = INPUT_KEYBOARD;
             inputs[1].ki = {VK_CAPITAL, 0, KEYEVENTF_KEYUP, 0, 0};
-            ::SendInput(sizeof(inputs) / sizeof(INPUT), inputs, sizeof(INPUT));
+            UINT sent = ::SendInput(sizeof(inputs) / sizeof(INPUT), inputs,
+                                    sizeof(INPUT));
+            if (sent != 2) {
+              weasel::LogEvent(L"caps lock: %u of 2 keys sent to turn the "
+                               L"light off (error %lu)",
+                               sent, GetLastError());
+              // (Nothing on its way: nothing to wait for. One sent: the
+              // press still comes back and is skipped as usual.)
+              if (sent == 0)
+                keyCountToSimulate = 0;
+            }
           }
         }
         *pfEaten = TRUE;

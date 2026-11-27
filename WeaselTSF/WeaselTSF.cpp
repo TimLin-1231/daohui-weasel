@@ -95,6 +95,16 @@ STDAPI WeaselTSF::Activate(ITfThreadMgr* pThreadMgr, TfClientId tfClientId) {
 }
 
 STDAPI WeaselTSF::Deactivate() {
+  // DaoHui: switching to another input method ends this one in that thread
+  // (as does the thread ending). The keys held down tell a shortcut such as
+  // Ctrl+Space or Win+Space from a click on the input menu.
+  auto held = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
+  weasel::LogEvent(L"text service deactivated (keys held:%ls%ls%ls%ls%ls)",
+                   held(VK_CONTROL) ? L" Ctrl" : L"",
+                   held(VK_SHIFT) ? L" Shift" : L"",
+                   held(VK_MENU) ? L" Alt" : L"",
+                   held(VK_LWIN) || held(VK_RWIN) ? L" Win" : L"",
+                   held(VK_SPACE) ? L" Space" : L"");
   _CancelPasteKey(L"deactivated");
   m_client.EndSession();
 
@@ -111,6 +121,10 @@ STDAPI WeaselTSF::Deactivate() {
 
   _UninitThreadMgrEventSink();
 
+  // DaoHui: stock never took this sink back, so a deactivated instance kept
+  // getting the thread's focus changes (and sending Echo for them).
+  _UninitThreadFocusSink();
+
   _pThreadMgr = NULL;
 
   _tfClientId = TF_CLIENTID_NULL;
@@ -124,21 +138,28 @@ STDAPI WeaselTSF::ActivateEx(ITfThreadMgr* pThreadMgr,
                              TfClientId tfClientId,
                              DWORD dwFlags) {
   com_ptr<ITfDocumentMgr> pDocMgrFocus;
+  // DaoHui: the step that failed, for the log (without a key sink every key
+  // goes to the application as typed, and nothing else would show why)
+  const wchar_t* failed = L"";
   _activateFlags = dwFlags;
 
   _pThreadMgr = pThreadMgr;
   _tfClientId = tfClientId;
 
-  if (!_InitThreadMgrEventSink())
+  if (!_InitThreadMgrEventSink()) {
+    failed = L"thread manager event sink";
     goto ExitError;
+  }
 
   if ((_pThreadMgr->GetFocus(&pDocMgrFocus) == S_OK) &&
       (pDocMgrFocus != NULL)) {
     _InitTextEditSink(pDocMgrFocus);
   }
 
-  if (!_InitKeyEventSink())
+  if (!_InitKeyEventSink()) {
+    failed = L"key event sink";
     goto ExitError;
+  }
 
   // if (!_InitDisplayAttributeGuidAtom())
   //	goto ExitError;
@@ -146,25 +167,34 @@ STDAPI WeaselTSF::ActivateEx(ITfThreadMgr* pThreadMgr,
   // like some opengl stuff
   _InitDisplayAttributeGuidAtom();
 
-  if (!_InitPreservedKey())
+  if (!_InitPreservedKey()) {
+    failed = L"preserved key";
     goto ExitError;
+  }
 
-  if (!_InitLanguageBar())
+  if (!_InitLanguageBar()) {
+    failed = L"language bar";
     goto ExitError;
+  }
 
   if (!_IsKeyboardOpen())
     _SetKeyboardOpen(TRUE);
 
-  if (!_InitCompartment())
+  if (!_InitCompartment()) {
+    failed = L"compartment sinks";
     goto ExitError;
-  if (!_InitThreadFocusSink())
+  }
+  if (!_InitThreadFocusSink()) {
+    failed = L"thread focus sink";
     goto ExitError;
+  }
 
   _EnsureServerConnected();
 
   return S_OK;
 
 ExitError:
+  weasel::LogEvent(L"text service could not start: %ls failed", failed);
   Deactivate();
   return E_FAIL;
 }
@@ -202,11 +232,13 @@ BOOL WeaselTSF::_InitThreadFocusSink() {
   return TRUE;
 }
 void WeaselTSF::_UninitThreadFocusSink() {
+  if (_dwThreadFocusSinkCookie == TF_INVALID_COOKIE || _pThreadMgr == NULL)
+    return;
   com_ptr<ITfSource> pSource;
   if (FAILED(_pThreadMgr->QueryInterface(&pSource)))
     return;
-  if (FAILED(pSource->UnadviseSink(_dwThreadFocusSinkCookie)))
-    return;
+  pSource->UnadviseSink(_dwThreadFocusSinkCookie);
+  _dwThreadFocusSinkCookie = TF_INVALID_COOKIE;
 }
 
 STDMETHODIMP WeaselTSF::OnActivated(REFCLSID clsid,
@@ -268,7 +300,13 @@ bool WeaselTSF::_EnsureServerConnected() {
       }
       retry = 0;
     }
-    return (m_client.Echo() != 0);
+    const bool ok = m_client.Echo() != 0;
+    // DaoHui: retry counts failures in a row. Stock counted every reconnect
+    // of the process's life, so after five that had worked, the next failed
+    // Echo already ran start_service.bat.
+    if (ok)
+      retry = 0;
+    return ok;
   } else {
     return true;
   }

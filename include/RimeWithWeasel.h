@@ -63,6 +63,8 @@ class RimeWithWeaselHandler : public weasel::RequestHandler {
   virtual void UpdateColorTheme(BOOL darkMode);
 
   void OnUpdateUI(std::function<void()> const& cb);
+  // DaoHui: creates m_keeper_session at server start if nobody is typing
+  void WarmUpIfIdle();
 
  private:
   void _Setup();
@@ -84,6 +86,11 @@ class RimeWithWeaselHandler : public weasel::RequestHandler {
 
   bool _IsSessionTSF(RimeSessionId session_id);
   void _UpdateInlinePreeditStatus(WeaselSessionId ipc_id);
+  WeaselSessionId _NextIpcId();
+  void _CreateKeeperSession(const char* when);
+  // (WarmUpIfIdle creates it only after this long without keyboard or mouse
+  // input.)
+  static const DWORD kKeeperIdleMs = 3000;
 
   RimeSessionId to_session_id(WeaselSessionId ipc_id) {
     return m_session_status_map[ipc_id].session_id;
@@ -119,4 +126,15 @@ class RimeWithWeaselHandler : public weasel::RequestHandler {
   bool m_global_ascii_mode;
   int m_show_notifications_time;
   DWORD m_pid;
+  // DaoHui: the last ipc id handed out. It only grows: stock numbered from
+  // the session map, which maintenance empties, so a client still holding an
+  // id from before could find another application's new session with it.
+  WeaselSessionId m_last_ipc_id;
+  // DaoHui: a session kept until Finalize and never given to a client.
+  // Creating the first session after librime starts loads the schema, the
+  // Lua components (their one-time setup included), dictionaries and the
+  // language model: 1-1.5 s, under the lock every request waits for. Made at
+  // server start while nobody types (WarmUpIfIdle), that no longer falls on
+  // someone's first key; otherwise the first AddSession makes it.
+  RimeSessionId m_keeper_session;
 };
